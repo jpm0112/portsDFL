@@ -1,0 +1,32 @@
+# M2: M0 with Student-T likelihood (heavy tails on log scale).
+model_key: m2_heavytail
+
+data:
+  path: training_dataset_bhm.csv
+  target: service_time_hours
+  vessel_col: "Tipo nave (agrupado)"
+  berth_col: "Sitio"
+  service_col: "Servicio"
+  train_year_max: 2024
+
+priors:
+  alpha0_mean: 3.47
+  alpha0_sd: 1.0
+  tau_halfnormal_sd: 0.5
+  sigma_halfnormal_sd: 0.7
+  nu_alpha: 2.0
+  nu_beta: 0.1
+
+sampler:
+  backend: pymc
+  chains: 4
+  tune: 1000
+  draws: 1000
+  target_accept: 0.95
+  random_seed: 42
+
+output:
+  trace: outputs/traces/m2_heavytail.nc
+  posterior_samples: outputs/posterior_samples/m2_heavytail_cells.parquet
+  n_predictive_draws: 4000
+  predict_unobserved_cells: true

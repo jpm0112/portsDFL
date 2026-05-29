@@ -1,0 +1,43 @@
+# CUDA-tag-agnostic. setup.ps1 picks the correct PyTorch wheel index URL
+# based on the host CUDA version detected via nvidia-smi.
+#
+# Manual install:
+#   pip install --extra-index-url https://download.pytorch.org/whl/cu121 -r requirements.txt
+#
+# Replace cu121 with cu118 / cu124 / cpu as appropriate.
+
+# Core scientific stack
+numpy>=1.26
+pandas>=2.2
+scikit-learn>=1.5
+
+# Deep learning
+torch>=2.4
+torchvision
+
+# Reference predictors
+lightgbm>=4.3
+pytabkit>=1.4              # RealMLP
+
+# Decision-Focused Learning
+pyepo>=0.3                 # SPO+, blackbox, perturbed Fenchel-Young
+
+# Hyperparameter tuning
+optuna>=3.6
+
+# Categorical encoding
+category-encoders>=2.6
+
+# Optimization solver bindings (license at ~/gurobi.lic)
+gurobipy>=11.0
+
+# Algebraic modeling layer for solver-agnostic MILPs (DBAP)
+pyomo>=6.7
+
+# Plotting for the PDF report (build_report.py)
+matplotlib>=3.8
+
+# Tooling
+pytest>=8.0
+ruff>=0.5
+black>=24.0

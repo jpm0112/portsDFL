@@ -1,0 +1,38 @@
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+
+# --- Python caches / build ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# --- Heavy generated outputs ---
+bayesian_model/outputs/
+optuna_studies/
+
+# --- Proprietary port data (excluded from this repo) ---
+data/
+external_data/
+training_dataset.csv
+training_dataset_bhm.csv
+clean_dataset.csv
+*.xlsx
+
+# --- Secrets / licenses ---
+gurobi.lic
+*.env
+.env
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+desktop.ini

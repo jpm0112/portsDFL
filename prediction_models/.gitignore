@@ -1,0 +1,38 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python build/cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Test/coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Tooling
+.ruff_cache/
+.mypy_cache/
+
+# Optuna study databases (regeneratable)
+optuna_studies/*.db
+optuna_studies/*.sqlite
+
+# Results (regeneratable; commit summaries elsewhere)
+results/**/*.csv
+results/**/*.json
+results/**/*.pkl
+!results/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

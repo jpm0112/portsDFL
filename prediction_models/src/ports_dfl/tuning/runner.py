@@ -1,0 +1,136 @@
+"""Optuna runner that wraps cross-validated objective evaluation.
+
+The runner is parametrized over:
+  - a ``model_factory(input_dim, **hp) -> BaseModel`` that builds a
+    fresh model from a hyperparameter dict;
+  - the suggestion function from ``search_spaces`` that produces those
+    hyperparameters from a trial;
+  - the dataset and CV splits.
+
+Optimization minimizes mean validation MAE across folds.
+"""
+
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import optuna
+import pandas as pd
+
+from ports_dfl.data.encoders import build_preprocessor
+from ports_dfl.metrics.regression import all_metrics
+
+ModelFactory = Callable[..., Any]
+SuggestFn = Callable[[optuna.Trial], dict[str, Any]]
+
+
+def _evaluate_one_config(
+    factory: ModelFactory,
+    hp: dict[str, Any],
+    X: pd.DataFrame,
+    y: pd.Series,
+    splits: list[tuple[np.ndarray, np.ndarray]],
+    categorical_strategy: str = "target",
+    numeric_scaler: str = "standard",
+) -> dict[str, list[float]]:
+    """Evaluate one hyperparameter configuration with K-fold CV.
+
+    Returns:
+        Dict with one key per metric, each mapping to a list of per-fold values.
+    """
+    metric_lists: dict[str, list[float]] = {"mae": [], "rmse": [], "r2": [], "mape": []}
+    for train_idx, val_idx in splits:
+        X_train_raw = X.iloc[train_idx]
+        X_val_raw = X.iloc[val_idx]
+        y_train = y.iloc[train_idx].to_numpy()
+        y_val = y.iloc[val_idx].to_numpy()
+
+        pre = build_preprocessor(
+            categorical_strategy=categorical_strategy,
+            numeric_scaler=numeric_scaler,
+        )
+        X_train = pre.fit_transform(X_train_raw, y_train).astype(np.float32)
+        X_val = pre.transform(X_val_raw).astype(np.float32)
+
+        model = factory(input_dim=X_train.shape[1], **hp)
+        model.fit(X_train, y_train, X_val, y_val)
+        preds = model.predict(X_val)
+        metrics = all_metrics(y_val, preds)
+        for k in metric_lists:
+            metric_lists[k].append(metrics[k])
+    return metric_lists
+
+
+def make_objective(
+    factory: ModelFactory,
+    suggest_fn: SuggestFn,
+    X: pd.DataFrame,
+    y: pd.Series,
+    splits: list[tuple[np.ndarray, np.ndarray]],
+    extra_suggest: SuggestFn | None = None,
+) -> Callable[[optuna.Trial], float]:
+    """Build an Optuna objective function for the given model + search space.
+
+    Args:
+        factory: callable that constructs the model from hyperparameters.
+        suggest_fn: model-specific search space.
+        X, y, splits: dataset and CV folds.
+        extra_suggest: optional hook to add extra suggestions
+            (e.g. categorical encoding strategy).
+
+    Returns:
+        An ``objective(trial) -> float`` minimizing mean val MAE.
+    """
+
+    def objective(trial: optuna.Trial) -> float:
+        hp = suggest_fn(trial)
+        if extra_suggest is not None:
+            hp.update(extra_suggest(trial))
+        cat_strategy = hp.pop("categorical_strategy", "target")
+        scaler = hp.pop("numeric_scaler", "standard")
+        results = _evaluate_one_config(
+            factory, hp, X, y, splits,
+            categorical_strategy=cat_strategy, numeric_scaler=scaler,
+        )
+        # Persist per-trial details
+        trial.set_user_attr("mae_per_fold", results["mae"])
+        trial.set_user_attr("rmse_per_fold", results["rmse"])
+        trial.set_user_attr("r2_per_fold", results["r2"])
+        trial.set_user_attr("mape_per_fold", results["mape"])
+        return float(np.mean(results["mae"]))
+
+    return objective
+
+
+def run_study(
+    study_name: str,
+    objective: Callable[[optuna.Trial], float],
+    n_trials: int,
+    storage_dir: Path,
+    seed: int = 42,
+) -> optuna.Study:
+    """Create or resume an Optuna study and run it for ``n_trials``.
+
+    The study persists to a SQLite file under ``storage_dir`` so runs are
+    resumable and tunable across sessions.
+    """
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    storage_url = f"sqlite:///{(storage_dir / f'{study_name}.db').as_posix()}"
+    sampler = optuna.samplers.TPESampler(seed=seed)
+    pruner = optuna.pruners.MedianPruner()
+    study = optuna.create_study(
+        study_name=study_name,
+        storage=storage_url,
+        sampler=sampler,
+        pruner=pruner,
+        direction="minimize",
+        load_if_exists=True,
+    )
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+    return study
+
+
+def trials_to_dataframe(study: optuna.Study) -> pd.DataFrame:
+    """Flatten a study's trials into a DataFrame for the results CSV."""
+    return study.trials_dataframe(attrs=("number", "value", "params", "user_attrs", "state"))
