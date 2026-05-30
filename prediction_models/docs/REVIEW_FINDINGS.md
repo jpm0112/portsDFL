@@ -6,6 +6,33 @@ left unchanged (behavior-altering or judgment-dependent) — your call.
 
 Severity: 🔴 likely bug / correctness · 🟡 robustness / edge case · ⚪ style / cleanup.
 
+## Summary
+
+~84 Python files across `prediction_models/`, `bayesian_model/`, and repo-root `src/` were
+reviewed and given beginner-friendly comments (in 6 steps, each its own commit). The repo
+byte-compiles cleanly and the 17 BAP tests still pass against Gurobi after annotation.
+
+**11 clear fixes applied** (all crash-safe / behavior-neutral):
+`berths.py` integer-`Sitio` `KeyError`; `weekly_instance` `n_services` `IndexError`;
+`optim/__init__` type-check imports; `pto.predict_pto` empty-input crash; `plan_week._write_csv`
+empty-rows crash; `run_dfl_synthetic` DFL row label by method; `run_dfl_real_bap` return-type hint;
+`benchmark_dbb` dead `import os`; `compare_models` leaked file handle; `report.py` hardcoded
+"661 vessel calls"; `figures.py` dead `rng` vars.
+
+**Top issues to look at (reported, not changed):**
+1. 🔴 **`build_training_dataset.py` historical-feature leakage** — windows ordered by mooring
+   *start* but target known at *unmooring*; an overlapping prior visit can leak. Highest priority.
+2. 🔴 **`classic_bap.py` big-M may be too small** for high-contention synthetic instances →
+   could distort schedules / the DFL regret signal.
+3. 🟡 **`node.py` `tree_depth` and `realmlp.py` `depth` are silently ignored** — tuning over them
+   does nothing.
+4. 🟡 **`data_prep.py` unguarded `np.log(target)`**, **`build_clean_dataset` `Sitio` float/NaN**
+   normalization, and several empty-input crashes (`diagnostics` ppc, `build_report` boxplot
+   `labels=` removed in matplotlib 3.11).
+5. 🟡 **`test_encoders.py` "no-leak" test only checks column counts** — can't actually catch leakage.
+
+Per-step detail follows.
+
 ---
 
 ## `prediction_models/src/ports_dfl/optim/` (step A)
