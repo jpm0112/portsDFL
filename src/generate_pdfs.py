@@ -8,19 +8,27 @@ Creates:
 Uses reportlab for PDF generation with clean formatting.
 """
 
+# 'import os' loads Python's standard module for talking to the operating
+# system (here used only to build file paths). The reportlab imports below
+# pull in the third-party PDF library; each "from X import Y" grabs specific
+# names so we can write 'Paragraph' instead of 'reportlab.platypus.Paragraph'.
 import os
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import inch
+from reportlab.lib.pagesizes import letter          # 'letter' = 8.5x11 inch page size object
+from reportlab.lib.units import inch                 # 'inch' = number of points in one inch (multiply to size things)
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.colors import HexColor
-from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from reportlab.lib.colors import HexColor            # turns a "#rrggbb" string into a reportlab color
+from reportlab.lib.enums import TA_LEFT, TA_CENTER   # text-alignment constants (left / center)
 from reportlab.platypus import (
+    # Parentheses let one import statement span several lines for readability.
+    # These are "flowables" — building blocks that reportlab stacks down the page.
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
     PageBreak, HRFlowable
 )
 
 
 # --- Color palette ---
+# Module-level constants (ALL_CAPS by convention). Defined once and reused so
+# every table/heading shares the same colors.
 DARK_BLUE = HexColor("#1a3a5c")
 MEDIUM_BLUE = HexColor("#2c5f8a")
 LIGHT_BLUE = HexColor("#e8f0f8")
@@ -30,13 +38,26 @@ WHITE = HexColor("#ffffff")
 DARK_GRAY = HexColor("#333333")
 LIGHT_GRAY = HexColor("#cccccc")
 
+# Build the path to the sibling 'data/' folder, regardless of where the script
+# is run from. Reading inside-out:
+#   __file__                 = path to THIS .py file
+#   os.path.abspath(...)     = make it a full absolute path
+#   os.path.dirname(...)     = strip the filename, leaving the 'src/' folder
+#   os.path.join(..., "..", "data") = go up one level ("..") into "data"
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 
 
+# 'def name():' defines a function. Calling get_styles() runs this code and
+# hands back ('return') whatever it produced — here, a stylesheet object.
 def get_styles():
     """Build custom paragraph styles for the PDF."""
+    # Start from reportlab's built-in styles ("Title", "Normal", "Heading1"...)
+    # then add our own customized ones on top.
     styles = getSampleStyleSheet()
 
+    # ParagraphStyle(...) defines how a block of text looks. parent=... copies
+    # settings from an existing style, then the keyword arguments override them.
+    # spaceAfter/spaceBefore = vertical gaps (in points); leading = line height.
     styles.add(ParagraphStyle(
         "DocTitle", parent=styles["Title"],
         fontSize=20, textColor=DARK_BLUE, spaceAfter=6, alignment=TA_CENTER
@@ -78,6 +99,9 @@ def get_styles():
     return styles
 
 
+# 'col_widths=None' is a DEFAULT argument: if the caller omits it, col_widths
+# becomes None and reportlab auto-sizes the columns. (None is a safe default
+# here; using a mutable default like [] would be a classic Python gotcha.)
 def make_table(headers, rows, col_widths=None):
     """
     Build a styled table with header row and alternating row colors.
@@ -85,9 +109,18 @@ def make_table(headers, rows, col_widths=None):
     Input:  headers (list of str), rows (list of lists), optional col_widths
     Output: Table flowable
     """
+    # A table's data is a list of rows. '[headers] + rows' wraps the single
+    # header list in its own list, then concatenates so the header is row 0
+    # and the body rows follow.
     data = [headers] + rows
 
+    # repeatRows=1 re-prints the header row at the top of each new page if the
+    # table spills over.
     table = Table(data, colWidths=col_widths, repeatRows=1)
+    # Each tuple is one styling command. The two (col, row) pairs mark the
+    # top-left and bottom-right corners of the cell range it applies to.
+    # -1 means "last": (0,0)->(-1,0) = the whole first (header) row;
+    # (0,1)->(-1,-1) = every body cell from row 1 to the last row/column.
     style_cmds = [
         # Header row
         ("BACKGROUND", (0, 0), (-1, 0), HEADER_BG),
@@ -106,7 +139,9 @@ def make_table(headers, rows, col_widths=None):
         ("LEFTPADDING", (0, 0), (-1, -1), 5),
         ("RIGHTPADDING", (0, 0), (-1, -1), 5),
     ]
-    # Alternating row colors
+    # Alternating row colors (a "zebra" look). range(1, len(data)) yields the
+    # row indexes 1..last (skipping the header at 0). 'i % 2' is the remainder
+    # after dividing by 2, so '== 0' picks the even-numbered rows to tint.
     for i in range(1, len(data)):
         if i % 2 == 0:
             style_cmds.append(("BACKGROUND", (0, i), (-1, i), ROW_ALT))
@@ -123,14 +158,20 @@ def hr():
 
 def build_column_description_pdf():
     """Generate column_description.pdf with all column definitions."""
+    # Join the data folder with the output filename to get the full path.
     filepath = os.path.join(DATA_DIR, "column_description.pdf")
+    # A SimpleDocTemplate is the PDF "canvas". Margins are given in points,
+    # so 0.6*inch converts 0.6 inches into the points reportlab expects.
     doc = SimpleDocTemplate(filepath, pagesize=letter,
                             topMargin=0.6*inch, bottomMargin=0.6*inch,
                             leftMargin=0.6*inch, rightMargin=0.6*inch)
     styles = get_styles()
+    # 'story' is the running list of flowables. We .append() content top to
+    # bottom, then doc.build(story) lays it all out at the end.
     story = []
 
-    # Title
+    # Title. Paragraph(text, style) makes one styled text block; styles["..."]
+    # looks up a style by name in the stylesheet dict we built above.
     story.append(Paragraph("Column Description", styles["DocTitle"]))
     story.append(Paragraph(
         "BAP Service Time Prediction \u2014 Puerto de San Antonio, Chile",
@@ -140,16 +181,21 @@ def build_column_description_pdf():
         "Dataset: training_dataset.csv | 5,597 rows | 44 columns",
         styles["DocSubtitle"]
     ))
-    story.append(hr())
+    story.append(hr())  # call our helper to drop a horizontal line flowable
 
-    W = 7.3 * inch  # total usable width
+    W = 7.3 * inch  # total usable width (defined for reference; not used below)
 
     # --- Target Variables ---
+    # SectionHead is our bold blue heading style. The u"..." prefix marks a
+    # Unicode string; the \u00xx escapes embed accented characters (e.g.
+    # í = í, — = em dash) so the file stays plain ASCII on disk.
     story.append(Paragraph("1. Target Variables / Variables Objetivo", styles["SectionHead"]))
     story.append(Paragraph(
         "Two service time metrics computed from timestamps. Not derived from Excel formulas.",
         styles["BodyText2"]
     ))
+    # 'cols' lists the width of each of the 4 columns (must match the number
+    # of headers/cells per row). Reassigned before each table below.
     cols = [1.5*inch, 1.2*inch, 2.4*inch, 2.2*inch]
     story.append(make_table(
         ["Column", "Spanish", "Description", "Calculation"],
@@ -353,7 +399,7 @@ def build_project_description_pdf():
     styles = get_styles()
     story = []
 
-    W = 7.1 * inch
+    W = 7.1 * inch  # usable width reference (defined but not used below)
 
     # Title
     story.append(Paragraph("Project Description", styles["DocTitle"]))
@@ -386,6 +432,8 @@ def build_project_description_pdf():
     ))
 
     story.append(Paragraph("Port Operations Sequence", styles["SubHead"]))
+    # A list of (label, description) tuples we'll loop over to emit one
+    # paragraph per step, instead of writing seven nearly identical lines.
     steps = [
         ("1. Arrival at anchorage", "F. arribo \u2014 vessel arrives and anchors outside the port"),
         ("2. Waiting at anchorage", "Vessel waits for berth availability (can be days for bulk carriers)"),
@@ -395,11 +443,14 @@ def build_project_description_pdf():
         ("6. Unmooring", u"1era esp\u00eda desatraque to \u00daltima esp\u00eda desatraque"),
         ("7. Departure", "Zarpe \u2014 vessel exits the port"),
     ]
+    # 'for step, desc in steps' unpacks each 2-item tuple into two variables at
+    # once. The f"..." is an f-string: text in {curly braces} is replaced by the
+    # variable's value, and <b>...</b> is reportlab's inline-bold markup.
     for step, desc in steps:
         story.append(Paragraph(
             f"<b>{step}</b>: {desc}", styles["SmallText"]
         ))
-        story.append(Spacer(1, 2))
+        story.append(Spacer(1, 2))  # Spacer(width, height) — a small vertical gap
 
     story.append(Spacer(1, 6))
     story.append(Paragraph(
@@ -488,6 +539,7 @@ def build_project_description_pdf():
 
     # Data Cleaning
     story.append(Paragraph("7. Data Cleaning", styles["SectionHead"]))
+    # A plain list of strings; the loop below prefixes each with a bullet (•).
     cleaning = [
         "7 records with berth stay < 2 hours removed (aborted calls or data errors)",
         "1 record with berth stay of 780 hours removed (anomalous)",
@@ -590,6 +642,7 @@ def build_project_description_pdf():
         col_widths=cols
     ))
 
+    # doc.build renders the whole 'story' list into the actual PDF file on disk.
     doc.build(story)
     print(f"  Created {filepath}")
 
@@ -601,5 +654,8 @@ def main():
     print("Done.")
 
 
+# This guard runs main() only when the file is executed directly
+# (python generate_pdfs.py). If another module imports this file, __name__ is
+# the module name (not "__main__"), so main() does NOT auto-run on import.
 if __name__ == "__main__":
     main()

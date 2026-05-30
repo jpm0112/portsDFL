@@ -10,25 +10,35 @@ All data for San Antonio, Chile (-33.5933, -71.6167).
 Output saved to external_data/ folder.
 """
 
-import os
-import sys
-import json
-import time
-import requests
-import pandas as pd
-from datetime import datetime
+# `import X` loads a module so we can use its functions as `X.something(...)`.
+import os        # file/folder paths and directory operations
+import sys       # access to interpreter (imported but not used here)
+import json      # JSON encode/decode (imported but not used here)
+import time      # used for time.sleep() to pause between API calls
+import requests  # third-party library for making HTTP requests (may need `pip install requests`)
+import pandas as pd  # `as pd` gives the module a short nickname; pandas handles tables (DataFrames)
+from datetime import datetime  # import just the `datetime` class from the datetime module
 
-# San Antonio port coordinates
+# These ALL-CAPS module-level names are constants (Python has no true constants;
+# uppercase is just a convention meaning "don't change this").
+# San Antonio port coordinates (decimal degrees; negative = south/west).
 LAT = -33.5933
 LON = -71.6167
 
-# Data period matching vessel records
+# Data period matching vessel records (ISO date strings: YYYY-MM-DD).
 START_DATE = "2020-01-01"
 END_DATE = "2025-08-17"
 
+# Build the output folder path relative to THIS script's location so it works
+# no matter where you run the script from.
+# __file__ = path to this .py file; abspath -> full path; dirname -> its folder;
+# ".." means "go up one level"; os.path.join joins parts with the OS path separator.
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "external_data")
 
 
+# `def name():` defines a function. The triple-quoted text right below is a
+# "docstring" documenting what the function does. This function takes no
+# arguments and returns a pandas DataFrame (the table it built).
 def fetch_daily_weather():
     """
     Fetch daily weather from Open-Meteo Historical API.
@@ -39,11 +49,15 @@ def fetch_daily_weather():
     print("Fetching daily weather data...")
 
     url = "https://archive-api.open-meteo.com/v1/archive"
+    # A dict (key: value pairs in {}) of query parameters sent in the URL.
+    # requests turns this into "?latitude=...&longitude=..." automatically.
     params = {
         "latitude": LAT,
         "longitude": LON,
         "start_date": START_DATE,
         "end_date": END_DATE,
+        # ",".join([...]) glues the list items into one comma-separated string,
+        # which is the format Open-Meteo expects for the "daily" parameter.
         "daily": ",".join([
             "temperature_2m_max",
             "temperature_2m_min",
@@ -57,15 +71,21 @@ def fetch_daily_weather():
         "timezone": "America/Santiago",
     }
 
+    # requests.get sends an HTTP GET; timeout=60 aborts if the server takes >60s.
     response = requests.get(url, params=params, timeout=60)
-    response.raise_for_status()
-    data = response.json()
+    response.raise_for_status()  # raise an error if the HTTP status was 4xx/5xx (so we don't parse bad data)
+    data = response.json()       # parse the JSON response body into a Python dict
 
+    # The API returns a dict where data["daily"] is itself a dict of column-name -> list.
+    # pd.DataFrame builds a table from that, one row per day.
     df = pd.DataFrame(data["daily"])
+    # .rename changes a column name; inplace=True modifies df directly (no copy returned).
+    # Open-Meteo calls the date column "time"; we rename it to "date" for clarity.
     df.rename(columns={"time": "date"}, inplace=True)
 
     filepath = os.path.join(OUTPUT_DIR, "weather_daily.csv")
-    df.to_csv(filepath, index=False)
+    df.to_csv(filepath, index=False)  # index=False = don't write the row-number column
+    # f-strings (f"...") let you embed values inside {} directly in the string.
     print(f"  Saved {filepath} ({len(df)} days, {df.columns.tolist()})")
     return df
 
@@ -81,14 +101,19 @@ def fetch_hourly_weather():
     print("Fetching hourly weather data (in yearly chunks)...")
 
     url = "https://archive-api.open-meteo.com/v1/archive"
-    all_dfs = []
+    all_dfs = []  # an empty list; we'll append one DataFrame per year, then combine them
 
-    # Split into yearly chunks to avoid large request limits
+    # Split into yearly chunks to avoid large request limits.
+    # range(2020, 2026) yields 2020,2021,...,2025 (the END value is EXCLUDED).
     years = range(2020, 2026)
     for year in years:
+        # Build that year's date range. These are strings; comparing ISO date
+        # strings (e.g. "2025-12-31" > "2025-08-17") sorts correctly because the
+        # YYYY-MM-DD format is alphabetically ordered the same as chronologically.
         chunk_start = f"{year}-01-01"
+        # min() caps the end at END_DATE so the last year stops at the real cutoff.
         chunk_end = min(f"{year}-12-31", END_DATE)
-        if chunk_start > END_DATE:
+        if chunk_start > END_DATE:  # skip any year that starts after our data window
             break
 
         print(f"  Fetching {year}...")
@@ -111,11 +136,14 @@ def fetch_hourly_weather():
         response.raise_for_status()
         data = response.json()
 
-        df = pd.DataFrame(data["hourly"])
-        all_dfs.append(df)
-        time.sleep(1)  # polite delay between requests
+        df = pd.DataFrame(data["hourly"])  # one year's hourly rows as a table
+        all_dfs.append(df)  # add this year's table to our list
+        time.sleep(1)  # polite delay (1 second) between requests so we don't hammer the API
 
+    # pd.concat stacks the list of yearly DataFrames into one big table.
+    # ignore_index=True renumbers the rows 0..N instead of repeating each chunk's 0-based index.
     result = pd.concat(all_dfs, ignore_index=True)
+    # Hourly data's timestamp column "time" -> "datetime" (it has hours, not just dates).
     result.rename(columns={"time": "datetime"}, inplace=True)
 
     filepath = os.path.join(OUTPUT_DIR, "weather_hourly.csv")
@@ -165,6 +193,7 @@ def fetch_marine_weather():
         response.raise_for_status()
         data = response.json()
 
+        # Marine API returns DAILY aggregates (note key is "daily", unlike the hourly fn above).
         df = pd.DataFrame(data["daily"])
         all_dfs.append(df)
         time.sleep(1)
@@ -182,8 +211,11 @@ def generate_sources_file():
     """
     Generate sources.md documenting all data sources, URLs, and access dates.
     """
+    # datetime.now() = current date/time; .strftime formats it as a string.
+    # "%Y-%m-%d" -> e.g. "2026-05-30" (4-digit year, 2-digit month, 2-digit day).
     today = datetime.now().strftime("%Y-%m-%d")
 
+    # A multi-line f-string (triple quotes). The {today}, {LAT}, etc. are filled in.
     content = f"""# External Data Sources
 
 Data downloaded on: {today}
@@ -304,18 +336,25 @@ These sources can provide LOA (length overall), beam, DWT, and build year for th
 """
 
     filepath = os.path.join(OUTPUT_DIR, "sources.md")
+    # `with open(...) as f:` opens the file and GUARANTEES it is closed afterward,
+    # even if an error happens inside the block. "w" = write (overwrites existing).
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(content)
     print(f"  Saved {filepath}")
 
 
 def main():
+    # "=" * 60 repeats the "=" character 60 times to draw a separator line.
     print("=" * 60)
     print("External Data Download for BAP Service Time Prediction")
     print("=" * 60)
 
+    # Create the output folder; exist_ok=True means "don't error if it already exists".
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+    # try/except runs the risky code, and if it raises an error, jumps to except
+    # instead of crashing. `as e` captures the error object so we can print it.
+    # Wrapping each fetch separately means one failed download won't stop the others.
     # 1. Daily weather
     try:
         fetch_daily_weather()
@@ -342,14 +381,18 @@ def main():
     print("\n" + "=" * 60)
     print("Summary")
     print("=" * 60)
+    # os.listdir gives the file names in a folder; loop over each and report its size.
     for f in os.listdir(OUTPUT_DIR):
         fpath = os.path.join(OUTPUT_DIR, f)
-        size = os.path.getsize(fpath)
-        if size > 1024 * 1024:
+        size = os.path.getsize(fpath)  # size in bytes
+        if size > 1024 * 1024:  # bigger than 1 MB -> show in MB
+            # In an f-string, {value:.1f} formats the number to 1 decimal place.
             print(f"  {f}: {size / (1024*1024):.1f} MB")
         else:
-            print(f"  {f}: {size / 1024:.0f} KB")
+            print(f"  {f}: {size / 1024:.0f} KB")  # otherwise show in KB (0 decimals)
 
 
+# This block runs ONLY when you execute this file directly (python download_external_data.py).
+# If another file imports this one, __name__ won't be "__main__", so main() won't auto-run.
 if __name__ == "__main__":
     main()

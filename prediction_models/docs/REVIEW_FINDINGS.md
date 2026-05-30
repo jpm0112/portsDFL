@@ -232,3 +232,47 @@ All ~23 files annotated for beginners: PyMC/ArviZ concepts (`with pm.Model()` co
 `pm.Deterministic`, `observed=` likelihood, `pm.sample` MCMC args, `pm.set_data`/`MutableData`,
 `sample_posterior_predictive`, `az.summary`/`loo`/r-hat/ESS) plus the Python syntax (dataclasses,
 type hints, comprehensions, `with`, f-strings, OOV zero-slot trick, cyclic sin/cos encodings).
+
+---
+
+## repo-root `src/` — data-build scripts (step F)
+
+### Bugs fixed
+- none — nothing was a clear, safe in-place fix; all items below are judgment calls / depend on
+  the (absent) source data, so they are reported.
+
+### Issues reported (not changed)
+- 🔴 **`build_training_dataset.py` · subtle leakage in historical features** — the expanding
+  per-vessel windows are ordered by `first_mooring_datetime` (when a visit *starts*), but the
+  target `estadia_sitio_hours` is only known at `last_unmooring_datetime` (when it *ends*).
+  `shift(1)` correctly drops the current row, but a *prior* visit that was still at berth when the
+  current visit began can contribute an outcome that wasn't yet knowable → mild look-ahead leakage
+  in `vessel_avg/median/std/last_berth_stay` and the group features. **This is the most important
+  finding of the review** for a prediction/DFL project. Suggested: only include prior visits whose
+  `last_unmooring_datetime` precedes the current `first_mooring_datetime` (or anchor the windows on
+  unmooring). Worth validating empirically.
+- 🟡 **`build_training_dataset.py`** — `clean_data` filters `estadia_sitio_hours < 2`/`> 500` but
+  rows with a **NaN** target compare False on both and survive into training; add
+  `dropna(subset=["estadia_sitio_hours"])` if NaN targets should be excluded.
+  `tiempo_en_puerto_hours` is never cleaned.
+- 🟡 **`build_clean_dataset.py` · `normalise_terminal_and_site`** — `df["Sitio"].astype(str)`
+  only handles an integer `9`; if pandas loads `Sitio` as float (any NaN in the column), `9.0`
+  stringifies to `"9.0"`, so the `== "9"` normalization silently never fires. Also `.astype(str)`
+  turns missing `Sitio` into the literal text `"nan"` in the CSV. Normalize numerically
+  (`pd.to_numeric(...) == 9`) and guard NaN.
+- 🟡 **`build_clean_dataset.py` · `fix_ordering_violations` V2** — the anomaly anchors
+  (`Última espía atraque`, `Fecha práctico desatraque`) aren't null-checked; a `NaT` anchor makes
+  `NaN >= NaN` False and silently routes to the dispatch branch, imputing from `NaT`.
+- ⚪ **`download_external_data.py`** — `pd.concat(all_dfs)` would raise on an empty list (can't
+  happen with the current hardcoded `range(2020, 2026)`, but would if dates change); the year loop
+  ignores `START_DATE` (always starts at 2020); unused `sys`/`json` imports.
+- ⚪ **`generate_pdfs.py`** — `DATA_DIR` is never created (`doc.build()` → `FileNotFoundError` if
+  `data/` is missing); hardcoded counts ("5,597 rows | 44 columns") can drift; dead `W`/`LIGHT_BLUE`/`TA_LEFT`.
+- ⚪ **`port_regions.py`** — docstring says "132 origin / 110 destination ports" but the dict has
+  170 unique keys (overlapping sets); region label "Argentina" also covers Uruguay ports
+  (intentional per the section header — confirm downstream).
+
+### Commenting
+All 5 build scripts annotated: pandas data-cleaning/feature idioms (`read_excel`, boolean masks,
+`.dt`/`Timedelta`, `.groupby().transform`, `expanding().shift(1)` anti-leakage, `np.select`),
+the `requests` HTTP-fetch loop, reportlab table assembly, and the dict-mapping fallback.
