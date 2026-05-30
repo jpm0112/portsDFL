@@ -1,6 +1,6 @@
 """Synthetic, classical-style DBAP instance generator.
 
-The existing :mod:`ports_dfl.optim.discrete_bap` MILP follows Cordeau et
+The existing :mod:`bap_optim.discrete_bap` MILP follows Cordeau et
 al. (2005). This module provides a synthetic instance generator that
 mimics standard benchmark structure (Poisson-style arrivals, three-class
 priority weights, lognormal service times) and exposes the difficulty
@@ -39,7 +39,7 @@ import numpy as np
 
 # Re-exported from discrete_bap (which itself re-exports it from instance.py).
 # `BAPInstance` is the frozen/immutable descriptor the MILP solver consumes.
-from ports_dfl.optim.discrete_bap import BAPInstance
+from bap_optim.discrete_bap import BAPInstance
 
 
 # ---------------------------------------------------------------------------

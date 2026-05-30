@@ -794,7 +794,7 @@ def _page_conclusions(pdf, data: dict):
              "   DFL training on N=8, M=3 with 60 instances finishes in ~100 s.\n\n")
     text += "Files of interest\n"
     text += "=================\n\n"
-    text += ("  src/ports_dfl/optim/discrete_bap.py     DBAP MILP, Pyomo + Gurobi\n"
+    text += ("  optimizers/src/bap_optim/discrete_bap.py     DBAP MILP, Pyomo + Gurobi\n"
              "  src/ports_dfl/train/dfl_blackbox.py     DBB training loop\n"
              "  scripts/run_dfl_real_bap.py             demo orchestrator\n"
              "  scripts/build_report.py                 this PDF generator\n"

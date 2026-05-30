@@ -37,11 +37,13 @@ import numpy as np
 # turns it absolute; `.parents[1]` goes up two folders (scripts/ -> prediction_models/);
 # then we append "src". Inserting at index 0 means Python searches here FIRST for imports.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+# The optimizers (bap_optim) now live in the sibling top-level package optimizers/src.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "optimizers" / "src"))
 
 # These imports only work because of the sys.path line above (the package lives in src/).
-from ports_dfl.optim.discrete_bap import DiscreteBAP, extract_decision
-from ports_dfl.optim.schedule import assemble_schedule, compute_kpis
-from ports_dfl.optim.weekly_instance import (
+from bap_optim.discrete_bap import DiscreteBAP, extract_decision
+from bap_optim.schedule import assemble_schedule, compute_kpis
+from bap_optim.weekly_instance import (
     build_weekly_instance,
     generate_synthetic_weekly_instance,
 )

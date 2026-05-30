@@ -41,7 +41,7 @@ from pyepo.func import perturbedOpt
 from torch.utils.data import DataLoader, TensorDataset  # dataset batching helpers
 
 from ports_dfl.config import DEVICE, SEED, set_seed
-from ports_dfl.optim.discrete_bap import (
+from bap_optim.discrete_bap import (
     BAPInstance,
     DiscreteBAP,
     extract_decision,

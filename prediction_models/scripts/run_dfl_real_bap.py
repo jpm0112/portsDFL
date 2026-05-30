@@ -46,6 +46,8 @@ warnings.filterwarnings("ignore", category=UserWarning)
 # `ports_dfl` package can be imported even when running this script directly.
 # `Path(__file__).resolve().parents[1]` = the directory two levels up from this file.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+# The optimizers (bap_optim) now live in the sibling top-level package optimizers/src.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "optimizers" / "src"))
 
 import torch.nn as nn
 
@@ -91,7 +93,7 @@ def make_predictor(name: str, n_features: int) -> nn.Module:
         return MLPHead(n_features)
     # f-string with `!r` inserts the repr of `name` (quotes shown) into the message.
     raise ValueError(f"Unknown predictor: {name!r}")
-from ports_dfl.optim.discrete_bap import (
+from bap_optim.discrete_bap import (
     DiscreteBAP,
     extract_decision,
     generate_bap_instance,

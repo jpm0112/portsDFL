@@ -149,14 +149,14 @@ $\ge 0$ by construction.
 \input{related_formulations}
 
 \section{Implementation pointers}
-The MILP lives in \texttt{src/ports\_dfl/optim/discrete\_bap.py}
+The MILP lives in \texttt{optimizers/src/bap\_optim/discrete\_bap.py}
 (\texttt{DiscreteBAP}, with the \texttt{hard\_windows} flag). The instance
 descriptor \texttt{BAPInstance} (with optional \texttt{latest\_start},
-\texttt{berth\_compat}, \texttt{service}) is in \texttt{optim/instance.py}; the
-berth catalog and compatibility in \texttt{optim/berths.py}; the pre-solve
-weekly slicing in \texttt{optim/weekly\_instance.py}; and the deterministic
-planner in \texttt{scripts/plan\_week.py}. Open modeling decisions and
-assumptions are tracked in \texttt{docs/formulation/decisions\_and\_questions.md}.
+\texttt{berth\_compat}, \texttt{service}) is in \texttt{bap\_optim/instance.py}; the
+berth catalog and compatibility in \texttt{bap\_optim/berths.py}; the pre-solve
+weekly slicing in \texttt{bap\_optim/weekly\_instance.py}; and the deterministic
+planner in \texttt{prediction\_models/scripts/plan\_week.py}. Open modeling decisions
+and assumptions are tracked in \texttt{prediction\_models/docs/formulation/decisions\_and\_questions.md}.
 
 \bibliographystyle{plainnat}
 \bibliography{references}

@@ -1,7 +1,7 @@
 """Train PtO vs DFL on a synthetic, contention-tuned BAP problem.
 
 Mirrors ``run_dfl_real_bap.py`` but pulls instances from
-:func:`ports_dfl.optim.classic_bap.make_classic_problem` instead of the
+:func:`bap_optim.classic_bap.make_classic_problem` instead of the
 real Chilean vessel-calls dataset. Exposes the difficulty knobs
 (``--contention``, ``--weight_dist``, ``--n_vessels``, ``--noise_std``,
 …) that let us stress-test DFL vs PtO.
@@ -31,12 +31,16 @@ SRC_DIR = THIS_DIR.parent / "src"
 # FRONT (index 0) so "import ports_dfl..." below works even if you launch from elsewhere.
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
+# The optimizers (bap_optim) now live in the sibling top-level package optimizers/src.
+_OPTIM_SRC = THIS_DIR.parent.parent / "optimizers" / "src"
+if str(_OPTIM_SRC) not in sys.path:
+    sys.path.insert(0, str(_OPTIM_SRC))
 
 from ports_dfl.config import DEVICE, RESULTS_DIR, SEED, set_seed
 from ports_dfl.metrics.regression import all_metrics
 from ports_dfl.models.linear import _LinearHead
-from ports_dfl.optim.classic_bap import make_classic_problem
-from ports_dfl.optim.discrete_bap import (
+from bap_optim.classic_bap import make_classic_problem
+from bap_optim.discrete_bap import (
     DiscreteBAP,
     extract_decision,
     schedule_cost_under_true_tau,

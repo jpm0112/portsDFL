@@ -91,7 +91,7 @@ from pyomo.opt import TerminationCondition  # enum describing how the solver fin
 
 # BAPInstance lives in a dependency-light module so instance builders/tests can
 # import it without the solver stack. Re-exported here for backward
-# compatibility (``from ports_dfl.optim.discrete_bap import BAPInstance``).
+# compatibility (``from bap_optim.discrete_bap import BAPInstance``).
 from .instance import BAPInstance
 
 

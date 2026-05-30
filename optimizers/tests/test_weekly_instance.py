@@ -14,16 +14,16 @@ import pytest
 # These imports bring in the functions/classes we are TESTING from the ports_dfl
 # package. If any of these names didn't exist, the import would fail and pytest
 # would report a "collection error" for the whole file.
-from ports_dfl.optim.berths import (
+from bap_optim.berths import (
     DEFAULT_BERTHS,
     Berth,
     berth_names,
     derive_berths_from_history,
     vessel_berth_compat,
 )
-from ports_dfl.optim.instance import BAPInstance
-from ports_dfl.optim.schedule import assemble_schedule, compute_kpis
-from ports_dfl.optim.weekly_instance import (
+from bap_optim.instance import BAPInstance
+from bap_optim.schedule import assemble_schedule, compute_kpis
+from bap_optim.weekly_instance import (
     build_weekly_instance,
     generate_synthetic_weekly_instance,
 )
@@ -232,7 +232,7 @@ def test_schedule_and_kpis_on_handmade_solution() -> None:
         service=np.array([True, False, False]),
     )
     # Local import to avoid a circular import at module load time.
-    from ports_dfl.optim.weekly_instance import WeeklyInstanceBundle
+    from bap_optim.weekly_instance import WeeklyInstanceBundle
 
     # Wrap the instance in the metadata bundle that the schedule/KPI helpers read.
     bundle = WeeklyInstanceBundle(

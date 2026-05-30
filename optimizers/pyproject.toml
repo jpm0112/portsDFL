@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bap-optim"
+version = "0.1.0"
+description = "Discrete Berth Allocation Problem MILP + weekly planner (Pyomo/Gurobi, PyEPO-compatible) for portsDFL."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pandas",
+    "pyomo>=6.7",
+]
+
+[project.optional-dependencies]
+# DFL training differentiates through the MILP via PyEPO; the deterministic
+# planner's Gantt chart needs matplotlib. Install as needed.
+dfl = ["pyepo>=0.3"]
+plot = ["matplotlib"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

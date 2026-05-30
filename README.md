@@ -25,7 +25,8 @@ against the standard **predict-then-optimize (PtO)** baseline.
 | Folder | What it is |
 |--------|------------|
 | **`data_pipeline/`** | Standalone scripts that turn the source Excel workbook into `clean_dataset.csv` and `training_dataset.csv` (cleaning, targets, leakage-safe features). |
-| **`prediction_models/`** | The main project: the `ports_dfl` package (PtO + DFL training, models, tuning) and the BAP MILP + weekly planner. Has its own README. |
+| **`optimizers/`** | The optimization layer: the discrete BAP **MILP** + the deterministic **weekly planner** (the `bap_optim` package). Self-contained — usable and testable without the proprietary data. |
+| **`prediction_models/`** | The main DFL project: the `ports_dfl` package (PtO + DFL training, models, tuning). Imports `bap_optim`. Has its own README. |
 | **`bayesian_model/`** | A separate PyMC subproject: hierarchical models that predict service time with calibrated uncertainty. |
 | **`docs/`** | `project_description.md`, `column_description.md`, plus `literature/` and `meetings/`. |
 

@@ -11,7 +11,7 @@ import pytest
 # pulls in Pyomo/PyEPO/Gurobi (via discrete_bap). If those solver libraries are
 # not installed, collection of this whole file fails — see the review note about
 # guarding with pytest.importorskip.
-from ports_dfl.optim.discrete_bap import (
+from bap_optim.discrete_bap import (
     DiscreteBAP,
     derive_starts_under_true_tau,
     extract_decision,

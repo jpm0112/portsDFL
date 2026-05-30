@@ -35,7 +35,7 @@ Per-step detail follows.
 
 ---
 
-## `prediction_models/src/ports_dfl/optim/` (step A)
+## `optimizers/src/bap_optim/` (step A)
 
 ### Bugs fixed
 - 🔴 **`berths.py` · `derive_berths_from_history`** — the loop iterated *stringified* index

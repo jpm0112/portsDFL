@@ -38,11 +38,11 @@ def _gurobi_available() -> bool:
 # file is double-guarded: pyepo must import AND Gurobi must be usable.
 pytestmark = pytest.mark.skipif(not _gurobi_available(), reason="Gurobi solver not available")
 
-from ports_dfl.optim.berths import DEFAULT_BERTHS, berth_names, vessel_berth_compat  # noqa: E402
-from ports_dfl.optim.discrete_bap import DiscreteBAP, extract_decision  # noqa: E402
-from ports_dfl.optim.instance import BAPInstance  # noqa: E402
-from ports_dfl.optim.schedule import assemble_schedule, compute_kpis  # noqa: E402
-from ports_dfl.optim.weekly_instance import generate_synthetic_weekly_instance  # noqa: E402
+from bap_optim.berths import DEFAULT_BERTHS, berth_names, vessel_berth_compat  # noqa: E402
+from bap_optim.discrete_bap import DiscreteBAP, extract_decision  # noqa: E402
+from bap_optim.instance import BAPInstance  # noqa: E402
+from bap_optim.schedule import assemble_schedule, compute_kpis  # noqa: E402
+from bap_optim.weekly_instance import generate_synthetic_weekly_instance  # noqa: E402
 
 
 # Another private helper. `n: int = 3` and `hard: bool = True` are parameters
@@ -155,7 +155,7 @@ def test_backward_compatible_no_windows_no_compat() -> None:
     """An instance with no windows/compat behaves like the original model."""
     # Local import inside the test: the legacy generator lives in discrete_bap;
     # importing here keeps it scoped to this single test.
-    from ports_dfl.optim.discrete_bap import generate_bap_instance
+    from bap_optim.discrete_bap import generate_bap_instance
 
     # ARRANGE: a plain instance with no compatibility matrix and no service flags.
     inst = generate_bap_instance(n_vessels=6, n_berths=2, horizon_hours=80.0, seed=0)

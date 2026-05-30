@@ -4,7 +4,7 @@ This dataclass is intentionally kept free of any optimization-backend imports
 (no Pyomo, no PyEPO), so instance builders and their unit tests can run in
 environments that don't have the solver stack installed. ``discrete_bap.py``
 re-exports ``BAPInstance`` from here, so existing imports
-(``from ports_dfl.optim.discrete_bap import BAPInstance``) keep working.
+(``from bap_optim.discrete_bap import BAPInstance``) keep working.
 """
 
 # `from __future__ import annotations` makes Python treat all type hints below

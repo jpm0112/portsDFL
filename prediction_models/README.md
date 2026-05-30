@@ -78,7 +78,7 @@ Discrete BAP (Cordeau et al. 2005, Bierwirth & Meisel 2010, 2015):
 Implemented in Pyomo for solver flexibility, with Gurobi as the default
 backend. Mutable `Param` for τ enables warm-started re-solves under new
 predictions without rebuilding the model. See
-`src/ports_dfl/optim/discrete_bap.py`.
+`optimizers/src/bap_optim/discrete_bap.py`.
 
 ### Week-long planning extensions
 
@@ -90,7 +90,7 @@ them behave exactly as before):
   created only for compatible `(i, b)` pairs (e.g. liquid bulk only at the
   liquid-bulk berth). The compatibility matrix is derived data-drivenly from
   the historical `(Terminal × vessel_type_group)` table, or from a documented
-  default catalog. See `optim/berths.py`.
+  default catalog. See `bap_optim/berths.py`.
 - **No-wait priority "services".** A subset of vessels (the port's term for
   committed/priority calls) carry a **hard** no-wait window `s_r ≤ aᵣ + slack`
   (slack → 0 ⇒ berth on arrival). With `hard_windows=False` the window becomes
@@ -98,10 +98,10 @@ them behave exactly as before):
   training, since it keeps every solve feasible under any predicted τ̂ (a hard
   window can make a solve infeasible and abort training).
 - **One-week scope.** The MILP solves exactly one 7-day instance. Slicing the
-  week's vessels is a **pre-solve** step (`optim/weekly_instance.py`); there is
+  week's vessels is a **pre-solve** step (`bap_optim/weekly_instance.py`); there is
   no rolling-horizon or cross-week logic inside the optimizer.
 
-`BAPInstance` (now in `optim/instance.py`, re-exported from `discrete_bap`)
+`BAPInstance` (now in `bap_optim/instance.py`, re-exported from `discrete_bap`)
 gains optional `latest_start`, `berth_compat`, and `service` fields. The full
 formulation, a comparison against the published BAP literature, and the open
 modeling decisions are documented in `docs/formulation/` (build
@@ -200,12 +200,7 @@ prediction_models/
 │   │   ├── tabm.py          tabm package wrapper (Tier 3)
 │   │   ├── node.py          pytorch_tabular DenseODSTBlock (Tier 4)
 │   │   └── log_target.py    log1p(τ) target wrapper for skewed targets
-│   ├── optim/
-│   │   ├── instance.py        BAPInstance descriptor (numpy-only, no solver dep)
-│   │   ├── discrete_bap.py    DBAP MILP (Pyomo + Gurobi); compat + hard/soft windows
-│   │   ├── berths.py          berth catalog + vessel–berth compatibility matrix
-│   │   ├── weekly_instance.py pre-solve weekly slicing + synthetic generator
-│   │   └── schedule.py        schedule assembly + KPIs (numpy-only)
+│   │   (the BAP optimizers moved out to the top-level ../optimizers/ package `bap_optim`)
 │   ├── train/
 │   │   ├── pto.py           generic MSE training loop (AdamW + cosine + AMP)
 │   │   └── dfl_blackbox.py  DBB DFL training loop (PyEPO blackboxOpt)

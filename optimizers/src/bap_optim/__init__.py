@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING
 # Dependency-light: safe to import eagerly (numpy only).
 # This is a normal, immediate import — `BAPInstance` is always available the
 # moment this package is imported, because it does not drag in the solver stack.
-from ports_dfl.optim.instance import BAPInstance
+from bap_optim.instance import BAPInstance
 
 # A dictionary mapping each public name -> the submodule (filename without .py)
 # that defines it. `dict[str, str]` is a type hint saying "keys are strings,
@@ -59,7 +59,7 @@ _LAZY: dict[str, str] = {
 }
 
 # `__all__` is the official list of public names for this package: it controls
-# what `from ports_dfl.optim import *` exports, and tools use it as the public API.
+# what `from bap_optim import *` exports, and tools use it as the public API.
 # `"BAPInstance"` is listed explicitly (it is imported eagerly above), then the
 # `*sorted(_LAZY)` part unpacks the alphabetically sorted dictionary keys into
 # this list. (`*` here means "spread the items of this iterable into the list";
@@ -80,10 +80,10 @@ def __getattr__(name: str):  # PEP 562 lazy attribute loading
         # Not one of our lazy names -> behave like a normal missing attribute.
         # `f"..."` is an f-string (text with embedded `{...}` expressions); `!r`
         # inserts the repr() form (quoted), e.g. produces "module 'x' has ...".
-        # `__name__` is this module's dotted import path (e.g. "ports_dfl.optim").
+        # `__name__` is this module's dotted import path (e.g. "bap_optim").
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     # Import the owning submodule *now*, by building its full dotted path as a
-    # string (e.g. "ports_dfl.optim.discrete_bap"). This is where PyEPO/Pyomo get
+    # string (e.g. "bap_optim.discrete_bap"). This is where PyEPO/Pyomo get
     # pulled in, but only if a solver-dependent name was actually requested.
     mod = importlib.import_module(f"{__name__}.{submodule}")
     # Pull the requested object (class/function) out of the freshly imported module.
@@ -110,7 +110,7 @@ def __dir__() -> list[str]:
 # and type inference. `# noqa: F401` silences the linter's "imported but unused"
 # warning, since the names are intentionally imported only for the type checker.
 if TYPE_CHECKING:  # static-analysis hints only; not executed at runtime
-    from ports_dfl.optim.berths import (  # noqa: F401
+    from bap_optim.berths import (  # noqa: F401
         DEFAULT_BERTHS,
         VESSEL_TYPE_GROUPS,
         Berth,
@@ -118,7 +118,7 @@ if TYPE_CHECKING:  # static-analysis hints only; not executed at runtime
         derive_berths_from_history,
         vessel_berth_compat,
     )
-    from ports_dfl.optim.discrete_bap import (  # noqa: F401
+    from bap_optim.discrete_bap import (  # noqa: F401
         DiscreteBAP,
         derive_starts_under_true_tau,
         extract_decision,
@@ -129,12 +129,12 @@ if TYPE_CHECKING:  # static-analysis hints only; not executed at runtime
     # berth_index) are in _LAZY/__all__ but were missing from this block, so type
     # checkers/IDEs could not see them. Added for parity (type-check-only; no
     # runtime behavior change since TYPE_CHECKING is False at runtime).
-    from ports_dfl.optim.schedule import (  # noqa: F401
+    from bap_optim.schedule import (  # noqa: F401
         assemble_schedule,
         berth_index,
         compute_kpis,
     )
-    from ports_dfl.optim.weekly_instance import (  # noqa: F401
+    from bap_optim.weekly_instance import (  # noqa: F401
         WeeklyInstanceBundle,
         build_weekly_instance,
         generate_synthetic_weekly_instance,

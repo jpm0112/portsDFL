@@ -31,12 +31,14 @@ warnings.filterwarnings("ignore")
 # absolute path; `.parents[1]` goes up two levels (scripts/ -> prediction_models/).
 # `sys.path.insert(0, ...)` puts our folder first so it is searched before others.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+# The optimizers (bap_optim) now live in the sibling top-level package optimizers/src.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "optimizers" / "src"))
 
 from ports_dfl.config import DEVICE, SEED
 from ports_dfl.data.encoders import build_preprocessor
 from ports_dfl.data.loader import load_training_dataset, split_features_target
 from ports_dfl.data.splits import make_cv_splits
-from ports_dfl.optim.discrete_bap import DiscreteBAP, generate_bap_instance
+from bap_optim.discrete_bap import DiscreteBAP, generate_bap_instance
 from ports_dfl.train.dfl_blackbox import DFLBlackboxConfig, train_dfl_blackbox
 
 
