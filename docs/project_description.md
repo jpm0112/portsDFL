@@ -126,7 +126,8 @@ portsDFL/
     ship_movement_2021_2022.zip      # Berth dynamics dataset (Zenodo)
     ship_movement_vessel_chars.csv   # 14 ships: length, beam, DWT (derived)
     sources.md                       # All sources documented
-  src/
+  data_pipeline/                     # (was src/) standalone data-build scripts
+    build_clean_dataset.py           # Source-faithful clean dataset builder
     build_training_dataset.py        # Training dataset builder script
     port_regions.py                  # Port-to-region mapping dictionary
     download_external_data.py        # External data downloader (weather)
@@ -134,6 +135,8 @@ portsDFL/
   docs/
     column_description.md            # Column definitions source (markdown)
     project_description.md           # This file (markdown)
+    literature/                      # (was DFL_Port_Literature_Review/) lit review
+    meetings/latex/                  # (was meetings/) DFL explainer figures
 ```
 
 ## Known Limitations
