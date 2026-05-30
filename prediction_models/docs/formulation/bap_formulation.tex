@@ -1,0 +1,164 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage[round]{natbib}
+\usepackage{hyperref}
+
+% Color palette (shared with meetings/latex/dfl_explainer.tex)
+\definecolor{predBlue}{HTML}{2C6FA8}
+\definecolor{optOrange}{HTML}{D97706}
+\definecolor{regretRed}{HTML}{B23A48}
+
+\newcommand{\I}{\mathcal{I}}
+\newcommand{\B}{\mathcal{B}}
+\newcommand{\R}{\mathcal{R}}
+\newcommand{\Bi}{\mathcal{B}_i}
+\newcommand{\bigM}{M}
+
+\title{A Week-long Discrete Berth Allocation MILP with No-wait Priority
+``Services'' and Vessel--Berth Compatibility, for Decision-Focused Learning}
+\author{portsDFL --- Port of San Antonio}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We formulate the operational problem of planning one week of berth assignments
+at the Port of San Antonio as a discrete, dynamic Berth Allocation Problem
+(BAP). The model assigns each vessel to a compatible berth and a start time,
+minimizing total weighted completion time. A subset of \emph{service} vessels
+(the port's term for committed/priority calls) carry a \emph{hard} no-wait
+window: they must be berthed essentially on arrival. The service time
+$\tau$ that drives the schedule is predicted by an upstream model and the
+predictor is trained \emph{decision-focused}, differentiating end-to-end
+through the MILP, with a predict-then-optimize baseline as the natural
+ablation. This note states the formulation, its hard/soft window modes, the
+single-week solve scope, and how it sits in the published BAP literature.
+\end{abstract}
+
+\section{Problem setting}
+The Port of San Antonio operates several terminals/berths that are
+\emph{heterogeneous}: each can physically handle only certain vessel types
+(e.g.\ liquid bulk only at the liquid-bulk berth). Over a planning week, vessels
+arrive at known times and must each be assigned to a compatible berth and a
+start time. Two operational realities drive the formulation:
+\begin{itemize}[nosep]
+  \item \textbf{Heterogeneous berths.} A vessel may use only the berths
+  compatible with its type; the compatibility map is populated data-drivenly
+  from the historical $(\text{terminal}\times\text{vessel-type})$ table.
+  \item \textbf{Priority ``services''.} A subset of vessels are committed calls
+  that must not wait: they are berthed at (or within a small slack of) their
+  arrival time. This is a hard reservation, not a soft preference.
+\end{itemize}
+The service time $\tau_i$ (berth occupation) is not known in advance; it is
+predicted from vessel/observed features. The optimizer consumes the prediction
+$\hat\tau$, and the predictor is trained so its predictions yield good
+\emph{decisions} (\S\ref{sec:dfl}).
+
+\section{Sets, parameters, and variables}
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+$\I=\{1,\dots,N\}$ & vessels in the planning week \\
+$\B=\{1,\dots,B\}$ & berths \\
+$\Bi\subseteq\B$ & berths \emph{compatible} with vessel $i$ \\
+$\R\subseteq\I$ & ``service'' (priority, no-wait) vessels \\
+$a_i\ge 0$ & arrival time of vessel $i$ (hours from week start) \\
+$w_i\ge 0$ & priority weight of vessel $i$ \\
+$\tau_i>0$ & service (berth-occupation) time; \emph{predicted} as $\hat\tau_i$ \\
+$l_r$ & latest start for service $r\in\R$; $l_r=a_r+\text{slack}$ \\
+$\bigM$ & big-$M$ constant ($\ge$ horizon $+$ max berth workload) \\
+\midrule
+$x_{ib}\in\{0,1\}$ & $1$ if vessel $i$ uses berth $b$ \quad(only for $b\in\Bi$) \\
+$s_i\ge a_i$ & start time of vessel $i$ \\
+$z_{ijb}\in\{0,1\}$ & $1$ if $i$ precedes $j$ at berth $b$ \\
+$\delta_r\ge 0$ & (soft mode) tardiness of service $r$ past its window \\
+\bottomrule
+\end{tabular}
+\caption{Notation.}
+\end{table}
+
+\section{Formulation}
+The discrete BAP, time-precedence variant
+\citep{cordeau2005berth, alzaabi2016berth}:
+\begin{align}
+\min\quad & \sum_{i\in\I} w_i\,(s_i + \tau_i)
+   \;\;\big[\,+\;p\!\!\sum_{r\in\R}\delta_r\ \text{(soft mode)}\,\big]
+   \label{eq:obj}\\
+\text{s.t.}\quad
+& \sum_{b\in\Bi} x_{ib} = 1 && \forall i\in\I \label{eq:assign}\\
+& s_i \ge a_i && \forall i\in\I \label{eq:arrival}\\
+& s_r \le l_r && \forall r\in\R \ \text{(hard mode)} \label{eq:window}\\
+& \delta_r \ge s_r - l_r && \forall r\in\R \ \text{(soft mode)} \label{eq:soft}\\
+& z_{ijb} + z_{jib} \le 1 && \forall b,\ i<j:\ i,j\in\Bi\cap\B_j \label{eq:one}\\
+& z_{ijb} + z_{jib} \ge x_{ib} + x_{jb} - 1 && \forall b,\ i<j \label{eq:order}\\
+& s_j \ge s_i + \tau_i - \bigM\,(1 - z_{ijb}) && \forall (i,j,b),\ i\ne j \label{eq:prec}
+\end{align}
+\eqref{eq:obj} is total weighted completion time. \eqref{eq:assign} assigns each
+vessel to exactly one \emph{compatible} berth---incompatible $x_{ib}$ are never
+created (the data-driven analogue of the forbidden-assignment cut
+$X_{ij}\le d_{ij}$ of \citealp{alzaabi2016berth}). \eqref{eq:arrival} is the
+dynamic arrival release. \eqref{eq:window}/\eqref{eq:soft} encode the no-wait
+service window (see \S\ref{sec:windows}). \eqref{eq:one}--\eqref{eq:order} force
+an ordering between any two vessels sharing a berth, and \eqref{eq:prec} is the
+big-$M$ precedence that prevents overlap. Precedence triples and $z$ variables
+are built only for pairs that can share a berth ($b\in\Bi\cap\B_j$), which keeps
+the model compact under tight compatibility.
+
+\section{Hard vs.\ soft service windows}\label{sec:windows}
+\textbf{Hard mode} (deterministic weekly planner) imposes \eqref{eq:window}:
+a service vessel literally cannot start after $l_r$. With $\text{slack}\to 0$
+this means ``berth on arrival.'' An over-subscribed week (more concurrent
+no-wait services than compatible berths) is then \emph{infeasible}---a genuine
+planning signal, surfaced to the planner rather than silently absorbed.
+
+\textbf{Soft mode} (decision-focused training) drops \eqref{eq:window} and adds
+the tardiness variable and penalty $\eqref{eq:soft}$, $+\,p\sum_r\delta_r$ in
+\eqref{eq:obj}. This keeps every solve \emph{feasible} under any predicted
+$\hat\tau$---essential because the DFL trainer re-solves the MILP for arbitrary
+(early-training, possibly poor) predictions, and an infeasible solve would abort
+training and undefine the regret.
+
+\section{Single-week solve scope}
+The MILP solves exactly one 7-day instance ($N$ fixed, horizon $168$\,h).
+Selecting the week's vessels is a \emph{pre-solve slicing step}; there is no
+multi-week, rolling-horizon, or cross-week carry-over inside the optimizer.
+Vessels arriving outside the chosen window are filtered out before the model is
+built.
+
+\section{Decision-focused learning integration}\label{sec:dfl}
+$\hat\tau$ enters both the objective \eqref{eq:obj} and the precedence
+constraints \eqref{eq:prec}. Because the predicted quantity appears in the
+constraints (not only as a linear objective cost vector), SPO+
+\citep{elmachtoub2022spo} does not apply directly; we differentiate through the
+solver with PyEPO blackbox differentiation \citep{pogancic2020blackbox}, which
+trains the predictor to minimize downstream regret. A predict-then-optimize
+(MSE) predictor is the controlled baseline. Regret is measured against the
+full-information schedule (the MILP solved under true $\tau$), and is
+$\ge 0$ by construction.
+
+\input{related_formulations}
+
+\section{Implementation pointers}
+The MILP lives in \texttt{src/ports\_dfl/optim/discrete\_bap.py}
+(\texttt{DiscreteBAP}, with the \texttt{hard\_windows} flag). The instance
+descriptor \texttt{BAPInstance} (with optional \texttt{latest\_start},
+\texttt{berth\_compat}, \texttt{service}) is in \texttt{optim/instance.py}; the
+berth catalog and compatibility in \texttt{optim/berths.py}; the pre-solve
+weekly slicing in \texttt{optim/weekly\_instance.py}; and the deterministic
+planner in \texttt{scripts/plan\_week.py}. Open modeling decisions and
+assumptions are tracked in \texttt{docs/formulation/decisions\_and\_questions.md}.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}

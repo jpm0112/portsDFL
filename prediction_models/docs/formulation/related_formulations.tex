@@ -1,0 +1,151 @@
+\section{Related formulations}
+
+\paragraph{Related formulations.}
+Our model is a discrete, dynamic Berth Allocation Problem (BAP) over a single
+planning week, solving an assignment, start-time and per-berth precedence MILP
+that minimizes total weighted completion time $\sum_i w_i (s_i + \tau_i)$. We
+situate it against the closest published BAP formulations along five axes: time
+representation, objective, time-window/priority semantics, vessel--berth
+compatibility, and whether the service (handling) time is \emph{learned}.
+
+The discrete--dynamic backbone descends directly from \citet{imai2001dynamic}
+and \citet{cordeau2005berth}. \citet{imai2001dynamic} introduced the discrete
+dynamic BAP as a three-index assignment of each vessel to a (berth,
+service-order) slot, minimizing the total \emph{unweighted} service time
+(waiting plus handling) with berth-dependent handling times $C_{ij}$ and hard
+arrival-release constraints, but no per-vessel weights, no due dates, and no
+eligibility filter. \citet{cordeau2005berth} recast the same discrete dynamic
+problem as a multi-depot vehicle-routing problem with time windows, replacing
+service-order indices with arc/precedence variables and, crucially for us,
+introducing a \emph{weighted} service-time objective with hard arrival and
+due-date windows and berth-dependent handling. Our objective
+$\sum_i w_i (s_i + \tau_i)$ is precisely the weighted-completion-time family of
+\citet{cordeau2005berth}, and our per-berth precedence variables $z_{ijb}$ with
+big-$M$ linking are the time-precedence analogue of their routing arcs; we
+differ in using an explicit calendar-time formulation over $s_i$ and $\tau_i$
+rather than sequencing arcs, in adding a hard no-wait priority class, and in
+treating $\tau$ as a learned quantity.
+
+On the priority axis, \citet{alzaabi2016berth} is the closest single antecedent
+to our deterministic core: they minimize $\sum_j w_j (S_j + p_j - a_j)$ -- the
+same weighted-completion-time objective net of arrival -- over a discrete
+assignment-plus-sequencing MILP with hard arrival release $S_j \ge a_j$. They
+also provide the cleanest precedent for our compatibility treatment: an explicit
+per-pair feasibility matrix $d_{ij}$ enforced by the forbidden-assignment cut
+$X_{ij} \le d_{ij}$ (plus a length/draft capacity variant), which is
+structurally identical to our data-driven berth-type eligibility restriction of
+$x_{ib}$ to compatible $(i,b)$ pairs. Their priority, however, is purely a soft
+cost weight $w_j$; there is no constraint forcing a privileged vessel to start
+without waiting. \citet{Ursavas2022PriorityControlBAP} likewise treats priority
+softly, but via a dynamic, time-aging priority index and user preference weights
+tuned by a scatter-search metaheuristic over a stochastic discrete-event
+simulation of heterogeneous berths; preferential vessels are favored in
+expectation but never guaranteed. In contrast, our ``service'' vessels (the
+port's term for committed/priority calls) receive a \emph{hard} no-wait window
+$s_r \le a_r + \mathrm{slack}$ with $\mathrm{slack}\!\to\!0$, an absolute
+reservation rather than an objective weight or a dispatch heuristic.
+
+On the time-window axis, \citet{golias2007berth} is the canonical soft-deadline
+berth model: each vessel has a requested departure window $[t_{j1}, t_{j2}]$,
+with early, timely, and late departures rewarded or penalized economically
+through big-$M$ segment-classification constraints, so deadlines are penalized
+but never enforced. This is the opposite design choice to ours:
+\citet{golias2007berth} deliberately makes windows soft and avoids the hard
+early-completion constraint (which it notes can be infeasible), whereas our
+priority calls impose exactly such a hard no-wait constraint, and our objective
+is weighted completion time rather than an earliness--tardiness net benefit.
+
+The closest work on the learning axis is \citet{chu2025integrating} (with
+companion \citealp{chu2026coordinated}), which embeds a vessel-arrival-time
+forecast into a continuous BAP using an XGBoost predictor and a real Hong Kong
+case study. Critically, theirs is a two-stage \emph{predict-then-optimize}
+pipeline: the predictor is trained on a forecasting loss (MAE/RMSE) and its
+point forecasts are passed as fixed inputs to the optimizer, with no gradient
+flowing back from decisions to predictions. The uncertain quantity is the
+\emph{arrival} time, the model is a continuous rectangle-packing BAP, and there
+is no priority class or learned berth-type compatibility. Our work instead
+trains the service-time predictor $\tau$ \emph{decision-focused}, differentiating
+end-to-end through the MILP with PyEPO blackbox differentiation
+\citep{pogancic2020blackbox} so the predictor minimizes downstream decision
+regret rather than prediction error; we report a predict-then-optimize MSE
+baseline (in the spirit of \citealp{elmachtoub2022spo}) as the natural ablation.
+The only neighboring port study that is genuinely decision-focused,
+\citet{pu2025predictthenoptimize}, applies DFL to seaport
+power-logistics/shore-power scheduling via a differentiable convex surrogate with
+continual learning, not to the BAP, and models neither priority vessels,
+berth-type compatibility, nor weighted completion time. To our knowledge no
+prior BAP formulation combines all four of our distinguishing ingredients --
+discrete weekly horizon, hard no-wait priority calls, data-driven berth-type
+compatibility, and a decision-focused (blackbox-differentiated) service-time
+predictor.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}p{2.7cm} p{2.3cm} p{2.4cm} p{2.2cm} p{2.0cm} p{2.3cm} p{1.6cm}@{}}
+\toprule
+\textbf{Paper} & \textbf{Model type} & \textbf{Objective} & \textbf{Time windows} & \textbf{Priority} & \textbf{Berth compat.} & \textbf{Pred./DFL} \\
+\midrule
+\citet{imai2001dynamic}            & Discrete, service-order MIP        & Total service time (unweighted)        & Arrival hard; no due date        & None                         & Berth-dep.\ handling $C_{ij}$         & No / No \\
+\citet{cordeau2005berth}           & Discrete, MDVRPTW (arc/prec.)      & Weighted service time                  & Arrival + due date, both hard    & Soft weight $v_i$            & Berth-dep.\ handling $t_{ik}$         & No / No \\
+\citet{golias2007berth}            & Discrete, position-indexed MILP    & Earliness--tardiness net benefit       & Departure window, \emph{soft}    & Soft monetary premia         & Berth-dep.\ handling $C_{ij}$         & No / No \\
+\citet{alzaabi2016berth}           & Discrete, big-$M$ sequencing MILP  & Weighted completion $\sum w_j(S_j{+}p_j{-}a_j)$ & Arrival hard; no hard due date & Soft weight $w_j$         & Explicit matrix $X_{ij}\le d_{ij}$    & No / No \\
+\citet{Ursavas2022PriorityControlBAP} & Sim.--opt.\ (scatter search)    & Expected total service time            & Stochastic ETA, soft             & Soft aging index + weights   & Per-class rates + thresholds          & No / No \\
+\citet{chu2025integrating}         & Continuous BAP (rectangle pack)    & Delay-induced cost / turnaround        & Pred.\ arrival release           & None                         & Length/tide/position (physical)       & Yes (arrival) / No (PtO) \\
+\citet{pu2025predictthenoptimize}  & Convex surrogate (not BAP)         & Power-logistics scheduling cost        & ---                              & None                         & --- (not berths)                      & Yes / Yes (convex DFL) \\
+\midrule
+\textbf{Ours}                      & \textbf{Discrete, weekly, prec.\ MILP} & \textbf{Weighted completion $\sum w_i(s_i{+}\tau_i)$} & \textbf{Arrival hard; no-wait $s_r\le a_r$ hard} & \textbf{Hard no-wait class + weights} & \textbf{Data-driven type matrix} & \textbf{Yes ($\tau$) / Yes (blackbox DFL)} \\
+\bottomrule
+\end{tabular}
+\caption{Closest published BAP formulations versus ours. ``Berth-dep.\
+handling'' = heterogeneity captured only through the berth-dependent
+handling-time matrix (no explicit eligibility filter); ``explicit matrix'' /
+``data-driven type matrix'' = a hard vessel--berth feasibility restriction.
+``PtO'' = two-stage predict-then-optimize (predictor trained on a forecasting
+loss); ``DFL'' = decision-focused, predictor differentiated through the
+optimizer.}
+\label{tab:related_bap}
+\end{table}
+
+\paragraph{Novelty.}
+What is genuinely novel in ours is the \emph{combination}, within a single
+discrete weekly BAP, of (i) a \emph{hard} no-wait reservation for a committed
+``service''-vessel class ($s_r \le a_r + \mathrm{slack}$,
+$\mathrm{slack}\!\to\!0$) and (ii) a \emph{decision-focused} (PyEPO
+blackbox-differentiated) predictor of the \emph{service/handling} time $\tau$
+that enters both the objective and the precedence constraints. No prior BAP
+formulation we found pairs a hard no-wait priority constraint with an
+end-to-end-differentiated service-time predictor: the priority-focused works
+\citep{Ursavas2022PriorityControlBAP, alzaabi2016berth, cordeau2005berth,
+golias2007berth} all treat priority \emph{softly} (objective weights, monetary
+premia, or an aging dispatch index) and treat handling time as a known input;
+the only closely related learning-based port work \citep{chu2025integrating} is
+two-stage predict-then-optimize on the \emph{arrival} time with no
+decision-aware training, no priority class, and a continuous (not discrete
+weekly) quay; and the only genuinely decision-focused port study
+\citep{pu2025predictthenoptimize} targets power-logistics, not berth allocation.
+A secondary, more incremental contribution is that the predicted quantity is the
+service time entering the precedence constraints (so SPO+ is inapplicable and a
+blackbox/perturbation-based gradient is required), a different and somewhat
+harder DFL setting than the objective-only cost-vector prediction used in most
+predict-then-optimize benchmarks.
+
+What is \emph{not} novel and should be stated plainly: the underlying
+optimization model is a standard discrete time-precedence DBAP -- the
+assignment, start-time, and per-berth big-$M$ precedence structure and the
+weighted-completion-time objective $\sum_i w_i(s_i+\tau_i)$ are the classical
+\citet{cordeau2005berth} / \citet{alzaabi2016berth} family, not a new model. The
+explicit vessel--berth compatibility encoding ($x_{ib}$ restricted to feasible
+pairs) is structurally the forbidden-assignment cut $X_{ij}\le d_{ij}$ of
+\citet{alzaabi2016berth}; calling it ``data-driven'' refers only to how the
+compatibility matrix is populated (from a vessel-type $\times$ terminal table),
+not to a new constraint family. Per-vessel priority weights $w_i$ are likewise
+standard. Blackbox differentiation of combinatorial solvers
+\citep{pogancic2020blackbox} and the predict-then-optimize / SPO+ framing
+\citep{elmachtoub2022spo} are existing methods we apply, not invent. The novelty
+is therefore in the problem framing and the integration -- hard committed-call
+reservations plus decision-focused service-time learning in a real (San Antonio)
+weekly berth-planning setting -- rather than in any single new constraint or new
+learning algorithm.

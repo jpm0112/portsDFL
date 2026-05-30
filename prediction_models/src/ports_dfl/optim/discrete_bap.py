@@ -12,21 +12,43 @@ Mandi et al. JAIR 2024)
 
 Multi-berth scheduling formulation, classical-literature time-precedence variant:
 
-  - N vessels with arrival times aᵢ and weights/priorities wᵢ (synthetic).
-  - B berths.
+  - N vessels with arrival times aᵢ and weights/priorities wᵢ.
+  - B berths, optionally HETEROGENEOUS: vessel i may only use a subset of
+    berths Bᵢ ⊆ B (vessel–berth compatibility, e.g. liquid bulk only at the
+    liquid-bulk berth).
+  - A subset of "service" vessels (the port's term for committed/priority
+    calls) carry a hard no-wait window: they must begin service by a latest
+    start lᵢ (with lᵢ = aᵢ + slack, slack→0 meaning "berth on arrival").
   - Predicted service times τᵢ from the upstream model.
   - Decisions:
-      x[i,b] ∈ {0,1}     vessel i is processed at berth b
+      x[i,b] ∈ {0,1}     vessel i is processed at berth b   (only for b ∈ Bᵢ)
       s[i] ≥ aᵢ          start time of vessel i
       z[i,j,b] ∈ {0,1}   vessel i precedes vessel j at berth b
   - Objective:
       min Σᵢ wᵢ · (s[i] + τᵢ)              ← total weighted completion time
+      (+ soft tardiness penalty in soft-window mode, see below)
   - Constraints:
-      Σ_b x[i,b] = 1                       (each vessel assigned)
+      Σ_{b∈Bᵢ} x[i,b] = 1                   (each vessel assigned, compatible berth)
       s[i] ≥ aᵢ                             (start after arrival)
+      s[r] ≤ lᵣ  for service r              (hard no-wait window; hard mode)
       z[i,j,b] + z[j,i,b] ≤ 1               (only one direction)
       z[i,j,b] + z[j,i,b] ≥ x[i,b] + x[j,b] - 1   (must order if both at b)
       s[j] ≥ s[i] + τᵢ - M·(1 - z[i,j,b])    (precedence; big-M)
+
+Hard vs. soft service windows
+-----------------------------
+``hard_windows=True`` (default; used by the deterministic weekly planner)
+encodes ``s[r] ≤ lᵣ`` as a hard upper bound on the start time, so a service
+vessel literally cannot wait past its window. This can make an instance
+INFEASIBLE if too many service vessels contend for the same berth at once —
+that is a real planning signal and ``solve()`` will raise.
+
+``hard_windows=False`` (recommended for DFL training) instead adds a
+nonnegative tardiness variable ``tard[r] ≥ s[r] − lᵣ`` and a penalty
+``+ p·Σ_r tard[r]`` to the objective. This keeps the MILP feasible under any
+predicted τ̂ — essential because the blackbox DFL trainer re-solves the model
+for arbitrary (possibly bad) predictions, and an infeasible solve would abort
+training and break the regret definition.
 
 Predicted τ enters both the objective and the precedence constraints. SPO+
 is therefore not directly applicable; the DFL trainer uses PyEPO's blackbox
@@ -44,19 +66,18 @@ Alignment with the classic discrete BAP
 ---------------------------------------
 This is the standard *time-indexed precedence* formulation of the
 discrete-DBAP-D problem in the Bierwirth & Meisel (2010, 2015) taxonomy.
-It mirrors Cordeau, Laporte, Legato & Moccia (2005) "DBAP1" with two
-small variations:
+It mirrors Cordeau, Laporte, Legato & Moccia (2005) "DBAP1" with these
+variations:
 
 - We use a per-berth precedence variable ``z[i,j,b]`` instead of Cordeau's
   cross-berth ``σ[i,j]`` linked through the assignment. Equivalent
   expressivity; ours has B× more sequencing binaries but cleaner constraints.
-- We don't include due dates / time windows. Those are clean extensions
-  that aren't needed for the current data.
+- We add vessel–berth compatibility (sparse ``x``) and hard/soft no-wait
+  windows for priority "service" vessels. Both are clean extensions over the
+  base DBAP and are needed for the real San Antonio weekly planning use case.
 """
 
 from __future__ import annotations
-
-from dataclasses import dataclass
 
 import numpy as np
 import pyomo.environ as pyo
@@ -64,30 +85,15 @@ from pyepo import EPO
 from pyepo.model.omo.omomodel import optOmoModel
 from pyomo.opt import TerminationCondition
 
+# BAPInstance lives in a dependency-light module so instance builders/tests can
+# import it without the solver stack. Re-exported here for backward
+# compatibility (``from ports_dfl.optim.discrete_bap import BAPInstance``).
+from .instance import BAPInstance
+
 
 # ---------------------------------------------------------------------------
-# Instance descriptor
+# Instance generator
 # ---------------------------------------------------------------------------
-
-@dataclass(frozen=True)
-class BAPInstance:
-    """Synthetic DBAP instance.
-
-    Fields:
-        n_vessels: number of vessels.
-        n_berths:  number of berths.
-        arrivals:  ndarray (n_vessels,) — vessel arrival times in hours.
-        weights:   ndarray (n_vessels,) — priority weights (≥0).
-        big_m:     scalar M for precedence constraints. Should be ≥ horizon
-            length plus the largest plausible total service time at one berth.
-    """
-
-    n_vessels: int
-    n_berths: int
-    arrivals: np.ndarray
-    weights: np.ndarray
-    big_m: float = 1000.0
-
 
 def generate_bap_instance(
     n_vessels: int = 8,
@@ -96,7 +102,7 @@ def generate_bap_instance(
     seed: int = 0,
     arrival_density: float = 0.7,
 ) -> BAPInstance:
-    """Generate a synthetic BAP instance.
+    """Generate a synthetic homogeneous BAP instance (no windows/compat).
 
     Vessels arrive uniformly over a fraction of the horizon (so the system
     is busy and decisions matter), with weights drawn from a log-normal so
@@ -129,6 +135,14 @@ class DiscreteBAP(optOmoModel):
     a mutable Pyomo Param, so re-solving with a new τ̂ does not rebuild
     the model — only the Param values change.
 
+    Window mode
+    -----------
+    ``hard_windows=True`` (default): service vessels get a hard upper bound
+    ``s[r] ≤ lᵣ`` (can render an instance infeasible — used by the
+    deterministic planner). ``hard_windows=False``: a soft tardiness penalty
+    keeps every solve feasible — used by the DFL trainer. See the module
+    docstring for the rationale.
+
     Solver
     ------
     Default is ``"gurobi"`` (uses Pyomo's direct Gurobi-via-Python interface).
@@ -139,21 +153,42 @@ class DiscreteBAP(optOmoModel):
     (PyEPO's ``self.x`` is bound to ``[m.s[0], …, m.s[N-1]]``).
     """
 
-    def __init__(self, instance: BAPInstance, solver_name: str = "gurobi") -> None:
+    def __init__(
+        self,
+        instance: BAPInstance,
+        solver_name: str = "gurobi",
+        hard_windows: bool = True,
+        penalty_weight: float = 1000.0,
+    ) -> None:
         self.instance = instance
+        # These must be set BEFORE super().__init__(), because the base
+        # __init__ calls self._getModel() (which reads self.hard_windows) and
+        # because PyEPO's multiprocessing path reconstructs the model from
+        # same-named instance attributes (getArgs). Store every __init__ arg.
+        self.solver_name = solver_name
+        self.hard_windows = bool(hard_windows)
+        self.penalty_weight = float(penalty_weight)
+        # Service vessels with a finite window (populated in _getModel).
+        self._service_idx: list[int] = []
+
         super().__init__(solver=solver_name)
+
         # The base class ``optOmoModel.__init__`` installs a placeholder
         # ``Objective(expr=0)`` AFTER ``_getModel`` returns. Replace it with
         # the real DBAP objective (which references the mutable ``tau`` Param,
         # so τ updates propagate without rebuilding).
         self._model.del_component(self._model.obj)
-        self._model.obj = pyo.Objective(
-            expr=sum(
-                self._model.weights[i] * (self._model.s[i] + self._model.tau[i])
-                for i in self._model.I
-            ),
-            sense=pyo.minimize,
+        obj_expr = sum(
+            self._model.weights[i] * (self._model.s[i] + self._model.tau[i])
+            for i in self._model.I
         )
+        # Soft-window mode: add the tardiness penalty term.
+        if not self.hard_windows and self._service_idx:
+            obj_expr = obj_expr + self.penalty_weight * sum(
+                self._model.tard[r] for r in self._service_idx
+            )
+        self._model.obj = pyo.Objective(expr=obj_expr, sense=pyo.minimize)
+
         # Configure Gurobi-friendly options uniformly. Other solvers may
         # ignore unrecognised keys; that's acceptable.
         if hasattr(self._solverfac, "options"):
@@ -173,34 +208,43 @@ class DiscreteBAP(optOmoModel):
 
         ``x_list`` is the list PyEPO uses as the decision representation —
         we use start times here. The MILP itself contains x[i,b], s[i],
-        z[i,j,b] as decisions.
+        z[i,j,b] as decisions. Assignment binaries x[i,b] are created only
+        for compatible (i,b); precedence triples only for pairs that can
+        share a berth.
         """
-        N = self.instance.n_vessels
-        B = self.instance.n_berths
-        a = self.instance.arrivals
-        w = self.instance.weights
+        inst = self.instance
+        N = inst.n_vessels
+        B = inst.n_berths
+        a = inst.arrivals
+        w = inst.weights
+
+        # Compatible (vessel, berth) pairs. Fail loudly if a vessel has no
+        # compatible berth — that instance is structurally infeasible.
+        for i in range(N):
+            if not inst.compatible_berths(i):
+                raise ValueError(
+                    f"Vessel {i} has no compatible berth (berth_compat row is all-False)."
+                )
+        xib_pairs = [(i, b) for i in range(N) for b in range(B) if inst.compatible(i, b)]
 
         m = pyo.ConcreteModel("dbap")
 
         # --- Sets ---------------------------------------------------------
         m.I = pyo.RangeSet(0, N - 1)
         m.B = pyo.RangeSet(0, B - 1)
-        # Ordered pairs (i,j) with i ≠ j
-        m.IJ = pyo.Set(
-            initialize=[(i, j) for i in range(N) for j in range(N) if i != j],
-            dimen=2,
-        )
-        # Triples (i,j,b) with i ≠ j
-        m.IJB = pyo.Set(
-            initialize=[
-                (i, j, b)
-                for i in range(N)
-                for j in range(N)
-                if i != j
-                for b in range(B)
-            ],
-            dimen=3,
-        )
+        # Sparse assignment index: only compatible (i, b).
+        m.XIB = pyo.Set(initialize=xib_pairs, dimen=2)
+        # Precedence triples (i,j,b), i≠j, only where BOTH i and j may use b
+        # (a pair that can never share a berth needs no sequencing).
+        ijb = [
+            (i, j, b)
+            for i in range(N)
+            for j in range(N)
+            if i != j
+            for b in range(B)
+            if inst.compatible(i, b) and inst.compatible(j, b)
+        ]
+        m.IJB = pyo.Set(initialize=ijb, dimen=3)
 
         # --- Parameters (data) -------------------------------------------
         m.weights = pyo.Param(
@@ -211,21 +255,44 @@ class DiscreteBAP(optOmoModel):
         )
         # τ is mutable — DFL/PtO updates this on every setObj.
         m.tau = pyo.Param(m.I, mutable=True, initialize=0.0)
-        m.big_m = pyo.Param(initialize=float(self.instance.big_m))
+        m.big_m = pyo.Param(initialize=float(inst.big_m))
+
+        # Service vessels carrying a finite latest-start window.
+        self._service_idx = [
+            i for i in range(N) if inst.is_service(i) and inst.latest(i) is not None
+        ]
 
         # --- Decision variables ------------------------------------------
-        m.x = pyo.Var(m.I, m.B, domain=pyo.Binary)
-        m.s = pyo.Var(
-            m.I,
-            domain=pyo.NonNegativeReals,
-            bounds=lambda mm, i: (float(a[i]), None),
-        )
+        m.x = pyo.Var(m.XIB, domain=pyo.Binary)
+
+        # Start time bounds: lower = arrival; upper = latest-start window for
+        # service vessels in HARD mode, else unbounded above.
+        def _s_bounds(mm, i):
+            lo = float(a[i])
+            hi = None
+            if self.hard_windows and inst.is_service(i):
+                li = inst.latest(i)
+                if li is not None:
+                    hi = float(li)
+            return (lo, hi)
+
+        m.s = pyo.Var(m.I, domain=pyo.NonNegativeReals, bounds=_s_bounds)
         m.z = pyo.Var(m.IJB, domain=pyo.Binary)
 
+        # Soft-window mode: nonnegative tardiness vars + linearisation.
+        if not self.hard_windows and self._service_idx:
+            m.S = pyo.Set(initialize=self._service_idx, dimen=1)
+            m.tard = pyo.Var(m.S, domain=pyo.NonNegativeReals)
+            m.tard_con = pyo.Constraint(
+                m.S,
+                rule=lambda mm, r: mm.tard[r] >= mm.s[r] - float(inst.latest(r)),
+            )
+
         # --- Constraints --------------------------------------------------
-        # (1) each vessel assigned to exactly one berth
+        # (1) each vessel assigned to exactly one compatible berth
         m.assign = pyo.Constraint(
-            m.I, rule=lambda mm, i: sum(mm.x[i, b] for b in range(B)) == 1
+            m.I,
+            rule=lambda mm, i: sum(mm.x[i, b] for b in inst.compatible_berths(i)) == 1,
         )
 
         # (3, 4) sequencing logic; only build for i < j to avoid duplicates
@@ -252,7 +319,7 @@ class DiscreteBAP(optOmoModel):
         # The objective is intentionally NOT set here — the parent
         # ``optOmoModel.__init__`` will install ``Objective(expr=0)`` right
         # after this method returns. Our ``__init__`` replaces it with the
-        # real weighted-completion-time objective in a follow-up step.
+        # real weighted-completion-time objective (+ soft penalty) afterwards.
 
         # PyEPO uses ``self.x`` as the decision representation. We expose
         # start-time variables; the cost vector PyEPO passes (predicted τ)
@@ -294,6 +361,10 @@ class DiscreteBAP(optOmoModel):
         was met) termination conditions. The configured 0.5 % MIP gap means
         any "feasible" return is provably within 0.5 % of optimum, which
         keeps regret comparisons clean.
+
+        In hard-window mode an over-constrained instance can be ``infeasible``;
+        this raises ``RuntimeError`` (callers — e.g. the weekly planner —
+        should catch it and report the conflicting service vessels).
         """
         results = self._solverfac.solve(self._model, tee=False)
         status = results.solver.termination_condition
@@ -306,7 +377,9 @@ class DiscreteBAP(optOmoModel):
         if status not in accepted:
             raise RuntimeError(
                 f"DBAP solver returned termination_condition={status} "
-                f"(N={self.instance.n_vessels}, B={self.instance.n_berths})."
+                f"(N={self.instance.n_vessels}, B={self.instance.n_berths}). "
+                f"In hard-window mode this usually means the service vessels "
+                f"cannot all be berthed within their no-wait windows."
             )
 
         N = self.instance.n_vessels
@@ -338,6 +411,14 @@ def derive_starts_under_true_tau(
     reality, capturing the cascade penalty of any underestimation. The FI
     benchmark uses true τ both inside the MILP and for evaluation, so its
     realised cost is by definition the lowest achievable.
+
+    NOTE: this re-derivation is window/compatibility agnostic — it only
+    enforces arrival lower bounds and per-berth precedence. Service-window
+    feasibility is enforced inside the MILP (hard mode) or penalised in the
+    objective (soft mode); it is intentionally not re-imposed here, so for
+    windowed instances the DFL regret is computed against the realised
+    start times without an extra window penalty. (If window-aware regret is
+    needed, fold the tardiness penalty into the trainer's loss as well.)
 
     Args:
         assignment: shape (N, B), x[i,b] ∈ {0,1}.
@@ -409,12 +490,13 @@ def extract_decision(optmodel: DiscreteBAP) -> tuple[np.ndarray, np.ndarray]:
     """Pull (x[i,b], z[i,j,b]) out of the most recently solved DBAP.
 
     The assignment ``x`` is rounded to {0,1} from the solver's fractional
-    output. The precedence matrix ``z`` is reconstructed from the
-    solver's start times (sorted within each berth), which guarantees a
-    strict total order per berth and avoids cycles caused by mildly
-    fractional ``z`` values. The big-M precedence constraint guarantees
-    that ordering by start time is consistent with the actual ``z``
-    selected by the solver, so this reconstruction is loss-less.
+    output. Incompatible (i,b) pairs have no variable and are read as 0.
+    The precedence matrix ``z`` is reconstructed from the solver's start
+    times (sorted within each berth), which guarantees a strict total order
+    per berth and avoids cycles caused by mildly fractional ``z`` values. The
+    big-M precedence constraint guarantees that ordering by start time is
+    consistent with the actual ``z`` selected by the solver, so this
+    reconstruction is loss-less.
 
     Returns:
         ``(assignment, order)`` ndarrays of shapes ``(N, B)`` and ``(N, N, B)``.
@@ -426,7 +508,9 @@ def extract_decision(optmodel: DiscreteBAP) -> tuple[np.ndarray, np.ndarray]:
     assignment = np.zeros((N, B), dtype=np.float32)
     for i in range(N):
         for b in range(B):
-            assignment[i, b] = float(round(float(pyo.value(m.x[i, b]))))
+            # x is sparse over compatible (i,b); missing pairs stay 0.
+            if (i, b) in m.XIB:
+                assignment[i, b] = float(round(float(pyo.value(m.x[i, b]))))
 
     starts = np.array(
         [float(pyo.value(m.s[i])) for i in range(N)], dtype=np.float32
