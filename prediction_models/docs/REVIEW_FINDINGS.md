@@ -62,3 +62,48 @@ All 7 files (`instance.py`, `discrete_bap.py`, `berths.py`, `weekly_instance.py`
 `schedule.py`, `__init__.py`, `classic_bap.py`) got meaningful beginner-level comments
 explaining Python syntax (decorators, dataclasses, type hints, comprehensions, lambdas,
 `self`/`-> None`, numpy/pandas idioms, Pyomo objects) and the non-obvious logic.
+
+---
+
+## `prediction_models/src/ports_dfl/` core — config/metrics/models/train/tuning (step B)
+
+### Bugs fixed
+- 🟡 **`train/pto.py` · `predict_pto`** — crashed on empty input (`np.concatenate([])` →
+  "need at least one array to concatenate"). **Fixed:** early `return np.empty((0,), float32)`.
+
+### Issues reported (not changed)
+- 🟡 **`models/node.py` · `tree_depth` ignored** — accepted by `NODE`/`_NODERegressor` but never
+  forwarded to `DenseODSTBlock`, so any sweep over `tree_depth` has no effect. Fix = pass
+  `depth=tree_depth` to the block (verify the exact kwarg against the installed library; old
+  checkpoints would change). Not auto-fixed (library absent, architecture-altering).
+- 🟡 **`models/realmlp.py` · `depth` ignored unless `hidden_dim` set** — `hidden_sizes` is only
+  built inside `if hidden_dim is not None`, so `RealMLP(depth=5)` alone does nothing.
+- 🟡 **`models/tabm.py` & `node.py` · validation split** — uses the *unshuffled tail* of the
+  training data; if rows are time/group-ordered, early stopping is miscalibrated. Tiny folds can
+  also leave an empty train set. Shared design choice — fix consistently if at all.
+- 🟡 **`models/log_target.py`** — docstring claims the back-transform is non-negative, but
+  `predict` returns `exp(clip(·)) − offset`, which can be negative; and `load()` stores
+  `inner_class`/`inner_module` metadata that it never uses to reconstruct the inner model (caller
+  must pre-build a matching inner).
+- 🟡 **`tuning/runner.py`** — a `MedianPruner` is configured but the objective never calls
+  `trial.report()`/`should_prune()`, so pruning never triggers (dead config); an empty `splits`
+  list yields `nan` (with a numpy warning) instead of a clear error.
+- 🟡 **`train/dfl_blackbox.py` & `dfl_perturbed.py`** — `_evaluate_regret` does `np.mean(regrets)`
+  on a possibly-empty list → `nan`, so early stopping never triggers and `best_val_regret` stays
+  `inf`. (Also documented the intended asymmetry: the training loss uses the solver's raw `starts`
+  while regret re-derives feasible starts — this is the standard PyEPO pattern, left as-is.)
+- ⚪ **`metrics/regression.py`** — `all_metrics` isn't in `metrics/__init__.py`'s `__all__` (so
+  `from ports_dfl.metrics import all_metrics` fails; the codebase imports it from
+  `.regression` directly, so nothing breaks today); `summarize_folds` uses `ddof=1` → `NaN` for a
+  single fold; `mae/rmse/r2` skip the `np.asarray(float)` coercion that `mape` applies.
+- ⚪ **`train/pto.py`** — cosine `T_max=max_epochs` means the LR never fully anneals when early
+  stopping fires; `best_epoch` is 0-indexed while `epochs_run` is a count.
+- ⚪ **`models/baselines.py`** — `GroupMeanBaseline.fit` would overwrite a pre-existing `_target`
+  column (extremely unlikely for this internal API).
+
+### Commenting
+All config/metrics/models/train/tuning files annotated: ABCs & `@abstractmethod`,
+`nn.Module`/`forward`/`super().__init__()`, decorators, dataclasses & `field(default_factory)`,
+type hints (`| None`, `Literal`, forward-ref returns), torch `save`/`load`/`state_dict`, AMP
+GradScaler flow, Optuna `suggest_*`, and numpy/pandas idioms. (Note: `tabm.py` had a transient
+accidental edit during annotation that the agent repaired — verified intact + compiles.)

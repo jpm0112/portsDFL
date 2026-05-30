@@ -10,4 +10,8 @@ Top-level package. Submodules:
     tuning   - Optuna search spaces and runner
 """
 
+# This file makes `ports_dfl` an importable Python package. Code that runs on
+# `import ports_dfl` goes here; right now it just declares the version string.
+# `__version__` is a conventional dunder (double-underscore) name tools read to
+# learn the package version.
 __version__ = "0.1.0"
