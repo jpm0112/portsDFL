@@ -107,3 +107,47 @@ All config/metrics/models/train/tuning files annotated: ABCs & `@abstractmethod`
 type hints (`| None`, `Literal`, forward-ref returns), torch `save`/`load`/`state_dict`, AMP
 GradScaler flow, Optuna `suggest_*`, and numpy/pandas idioms. (Note: `tabm.py` had a transient
 accidental edit during annotation that the agent repaired — verified intact + compiles.)
+
+---
+
+## `prediction_models/scripts/` (step C)
+
+### Bugs fixed
+- 🟡 **`plan_week.py` · `_write_csv`** — `rows[0].keys()` with no guard → `IndexError` if the
+  solver schedules zero vessels. **Fixed:** early `return` on empty `rows`.
+- 🟡 **`run_dfl_synthetic.py`** — the predictive-summary CSV hard-coded the DFL row label
+  `"DFL (blackbox)"`, mislabeling runs done with `--method perturbed`. **Fixed:** use the
+  computed `dfl_tag`.
+- ⚪ **`run_dfl_real_bap.py`** — `_evaluate_decisions` was hinted `-> dict` but returns a
+  `(summary, df)` tuple. **Fixed:** corrected to `-> tuple[dict, pd.DataFrame]` (annotation only).
+- ⚪ **`benchmark_dbb.py`** — removed unused `import os`.
+
+### Issues reported (not changed)
+- 🟡 **`build_report.py`** — `ax.boxplot(..., labels=[...])` uses the `labels=` kwarg deprecated
+  in matplotlib 3.9 and **removed in 3.11** → `TypeError` on newer matplotlib. Switch to
+  `tick_labels=`. Also: CDF/boxplot pages divide by `len(...)` without guarding an empty CSV;
+  `.iloc[0]` after a `str.contains("PtO"/"DFL")` filter can `IndexError` if labels are renamed.
+- 🟡 **`compare.py`** — display label uses `fname.replace('cv_summary','').strip('_.csv')`;
+  `str.strip` strips any of the *characters* `_.csv`, so `cv_summary_stock.csv` → `"tock"`
+  (drops the leading `s`). Use `Path(fname).stem.replace('cv_summary','').strip('_')`. Cosmetic
+  (label only). Also `_read_summary` can `KeyError` on a malformed summary CSV.
+- 🟡 **`run_realmlp.py`** — the tuned re-evaluation `RealMLP(input_dim=..., **best_params)` does
+  **not** pass `n_epochs`, so it uses RealMLP's class default instead of `--n_epochs` (the stock
+  and tuning runs do pass it). Inconsistent epochs between tuning and final eval.
+- ⚪ **`run_linear.py`** — `Ridge(random_state=SEED)` is a no-op under the default closed-form
+  solver (only `sag`/`saga` use it); the sklearn-vs-PyTorch `alpha = weight_decay·n` mapping is
+  approximate, so the "sanity-check" MAE may legitimately diverge.
+- ⚪ **`run_tabm.py` / `run_node.py`** — sharing a `--study_name` resumes the existing Optuna
+  SQLite study (`load_if_exists=True`), so one model could append to another's study; and
+  `_evaluate_best` hardcodes `categorical_strategy="target"` (would mismatch if that's ever
+  tuned). Safe with current defaults.
+- ⚪ **`benchmark_dbb.py`** — stale docstring ("median of 10 solves" / "1 epoch" vs the code's 12
+  solves-minus-cold-start / `max_epochs=5`); header/data column widths don't align.
+- 🟡 **Several scripts** — relative-percent prints (`run_dfl_real_bap.py`,
+  `run_dfl_synthetic.py`) divide by the FI/PtO mean without a zero guard → `inf`/`nan` if that
+  baseline is exactly 0 (possible on very-low-contention synthetic instances).
+
+### Commenting
+All 13 scripts annotated: argparse (flags, `store_true`, mutually-exclusive groups), `sys.path`
+bootstrapping, `if __name__ == "__main__":`, the PtO/DFL pipeline steps, `@contextmanager`
+timing, and pandas/numpy/matplotlib/reportlab idioms.

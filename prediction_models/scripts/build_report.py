@@ -18,44 +18,60 @@ Pages:
   9. Conclusions
 """
 
+# `from __future__ import annotations` lets us write type hints like
+# `pd.DataFrame | None` (the "X or None" syntax) even on older Python versions;
+# it tells Python to treat all annotations as plain text instead of evaluating them.
 from __future__ import annotations
 
 import json
 import sys
 import warnings
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path  # Path = object-oriented file paths (better than raw strings)
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from matplotlib.backends.backend_pdf import PdfPages
+import matplotlib.pyplot as plt  # the plotting library; `plt` is the conventional alias
+import numpy as np  # numerical arrays / math; `np` is the conventional alias
+import pandas as pd  # tables (DataFrames) loaded from CSV; `pd` is the conventional alias
+from matplotlib.backends.backend_pdf import PdfPages  # lets us write many figures into one PDF
 
+# Silence library warnings so they don't clutter the report-build output.
 warnings.filterwarnings("ignore")
+# Add the project's `src/` folder to Python's import search path so `import ports_dfl...`
+# works no matter where this script is launched from.
+# `Path(__file__)` = this script's path; `.resolve()` makes it absolute;
+# `.parents[1]` is the grandparent folder (parents[0] = scripts/, parents[1] = project root).
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+# `# noqa: E402` tells linters to ignore "import not at top of file" — it must come
+# after the sys.path tweak above so the import can be found.
 from ports_dfl.config import RESULTS_DIR  # noqa: E402
 
-PAGE_SIZE = (8.5, 11)  # US Letter, portrait
+PAGE_SIZE = (8.5, 11)  # US Letter, portrait — width x height in inches for each PDF page
 
 
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
 
+# `-> pd.DataFrame | None` is a type hint: this returns a DataFrame OR None.
+# Hints are documentation only — Python does not enforce them at runtime.
 def _load_csv(path: Path) -> pd.DataFrame | None:
-    if not path.exists():
+    if not path.exists():  # missing file -> return None instead of crashing
         return None
-    return pd.read_csv(path)
+    return pd.read_csv(path)  # read the CSV into a table (DataFrame)
 
 
 def _load_json(path: Path) -> dict | None:
     if not path.exists():
         return None
+    # `with open(...) as f` opens the file and guarantees it is closed afterwards,
+    # even if an error happens inside the block.
     with open(path, encoding="utf-8") as f:
-        return json.load(f)
+        return json.load(f)  # parse the file's JSON text into a Python dict
 
 
+# `*paths` collects any number of arguments into a tuple, so you can call
+# `_first_existing(a, b, c)`. Returns the first file that loads successfully.
 def _first_existing(*paths: Path) -> pd.DataFrame | None:
     for p in paths:
         df = _load_csv(p)
@@ -66,7 +82,9 @@ def _first_existing(*paths: Path) -> pd.DataFrame | None:
 
 def _load_all_data() -> dict:
     """Load every CSV / JSON we need into a dictionary."""
-    rb = RESULTS_DIR / "dfl_real_bap"
+    rb = RESULTS_DIR / "dfl_real_bap"  # `/` joins paths (RESULTS_DIR is a Path)
+    # Build a dict mapping a short name -> loaded table (or None if the file is missing).
+    # Pages below look things up by these keys.
     return {
         "comparison": _load_csv(RESULTS_DIR / "comparison.csv"),
         "baselines": _load_csv(RESULTS_DIR / "baselines" / "cv_summary.csv"),
@@ -90,10 +108,13 @@ def _model_summary_row(df: pd.DataFrame | None, model_name: str) -> dict | None:
     """Pull mean/std rows from a model's CV summary file."""
     if df is None:
         return None
+    # Use the first column (typically the fold label, e.g. "mean"/"std") as the row index
+    # so we can look rows up by name with `.loc`.
     df_idx = df.set_index(df.columns[0])
-    if "mean" not in df_idx.index:
+    if "mean" not in df_idx.index:  # no aggregated "mean" row -> nothing to report
         return None
-    mean = df_idx.loc["mean"]
+    mean = df_idx.loc["mean"]  # the row labelled "mean" (a Series of metric values)
+    # Inline `A if cond else B` is Python's ternary: grab the std row only if present.
     std = df_idx.loc["std"] if "std" in df_idx.index else None
     return {
         "model": model_name,
@@ -107,18 +128,24 @@ def _model_summary_row(df: pd.DataFrame | None, model_name: str) -> dict | None:
 
 def _build_predictive_table(data: dict) -> pd.DataFrame:
     """Combined per-model + baseline 5-fold-CV table."""
+    # `rows: list[dict]` annotates this as a list of dicts; each dict becomes one table row.
     rows: list[dict] = []
+    # Loop over (data-key, display-name) pairs. The `[(...), (...)]` is a list of tuples;
+    # `for key, name in ...` unpacks each tuple into two variables.
     for key, name in [
         ("linear_cv", "Linear (Ridge)"),
         ("realmlp_cv", "RealMLP"),
         ("tabm_cv", "TabM"),
         ("node_cv", "NODE"),
     ]:
+        # `.get(key)` returns the value or None if the key is missing (safer than data[key]).
         r = _model_summary_row(data.get(key), name)
         if r is not None:
-            rows.append(r)
+            rows.append(r)  # add this model's metrics row to the table
     if data["baselines"] is not None:
+        # `.iterrows()` yields (index, row) for each DataFrame row; `_` means "ignore the index".
         for _, br in data["baselines"].iterrows():
+            # Tidy up the baseline name for display (replace internal codes with readable text).
             label = str(br["baseline"]).replace("group_mean__", "group-mean ")
             label = label.replace("global_mean", "global mean")
             rows.append(
@@ -131,6 +158,8 @@ def _build_predictive_table(data: dict) -> pd.DataFrame:
                     "mae_std": float(br["mae_std"]),
                 }
             )
+    # Turn the list of row-dicts into a DataFrame, sort best-first by MAE, and
+    # renumber the index from 0 (drop=True discards the old jumbled index).
     return pd.DataFrame(rows).sort_values("mae").reset_index(drop=True)
 
 
@@ -138,35 +167,44 @@ def _build_predictive_table(data: dict) -> pd.DataFrame:
 # Drawing helpers
 # ---------------------------------------------------------------------------
 
+# Create one blank figure = one PDF page. `title: str | None = None` means the
+# title argument is optional (defaults to None = no title banner).
 def _new_page(title: str | None = None):
-    fig = plt.figure(figsize=PAGE_SIZE)
-    if title:
+    fig = plt.figure(figsize=PAGE_SIZE)  # a figure is a whole page/canvas
+    if title:  # only add a top banner if a title was given
         fig.suptitle(title, fontsize=16, fontweight="bold", y=0.97)
     return fig
 
 
+# `**kwargs` collects any extra keyword arguments into a dict and forwards them to ax.text.
 def _draw_text(ax, text: str, fontsize: int = 10, **kwargs):
-    ax.axis("off")
+    ax.axis("off")  # hide the x/y axes — we just want plain text on the page
     ax.text(0, 1, text, fontsize=fontsize, va="top", ha="left", wrap=True, **kwargs)
 
 
 def _table_axes(fig, rect, df: pd.DataFrame, header_color: str = "#cfd8dc",
                 col_widths: list[float] | None = None) -> None:
     """Render a DataFrame as a matplotlib table inside ``rect`` (l, b, w, h)."""
+    # add_axes places a sub-region on the page; rect = [left, bottom, width, height]
+    # in figure fractions (0..1).
     ax = fig.add_axes(rect)
     ax.axis("off")
-    cell_text = df.values.tolist()
-    col_labels = list(df.columns)
+    cell_text = df.values.tolist()  # the table body as a list-of-lists
+    col_labels = list(df.columns)  # the column headers
     table = ax.table(
+        # Nested list comprehension: for each row, build a list of stringified cells.
+        # Reads as "[ str(v) for each v in row ] for each row in cell_text".
         cellText=[[str(v) for v in row] for row in cell_text],
         colLabels=col_labels,
         cellLoc="center",
         loc="center",
         colWidths=col_widths,
     )
-    table.auto_set_font_size(False)
+    table.auto_set_font_size(False)  # turn off auto-sizing so our fontsize sticks
     table.set_fontsize(8)
-    table.scale(1.0, 1.4)
+    table.scale(1.0, 1.4)  # stretch rows taller (1.4x) for readability
+    # Style the header row (row index 0): grey background + bold text.
+    # `range(len(col_labels))` gives column indices 0, 1, 2, ...
     for j in range(len(col_labels)):
         table[(0, j)].set_facecolor(header_color)
         table[(0, j)].set_text_props(weight="bold")
@@ -177,6 +215,8 @@ def _table_axes(fig, rect, df: pd.DataFrame, header_color: str = "#cfd8dc",
 # ---------------------------------------------------------------------------
 
 def _page_title(pdf, data: dict):
+    # `data.get("config") or {}` -> use the config dict if present, otherwise an empty
+    # dict (so `.get()` calls below stay safe even when config.json is missing).
     cfg = data.get("config") or {}
     fig = _new_page()
     ax = fig.add_axes([0.10, 0.05, 0.80, 0.90])
@@ -188,6 +228,8 @@ def _page_title(pdf, data: dict):
     ax.text(0.5, 0.86, subtitle, fontsize=12, ha="center", va="top", style="italic")
     ax.text(
         0.5, 0.82,
+        # f-string: text in quotes prefixed with `f`; `{...}` embeds a value.
+        # Here it stamps today's date as YYYY-MM-DD.
         f"Generated {datetime.now().strftime('%Y-%m-%d')}",
         fontsize=9, ha="center", va="top", color="#555",
     )
@@ -221,7 +263,9 @@ def _page_title(pdf, data: dict):
     ax.text(0.0, 0.42, "Glossary", fontsize=12, fontweight="bold")
     ax.text(0.0, 0.39, glossary, fontsize=9.5, va="top", family="monospace")
 
-    if cfg:
+    if cfg:  # only print the config block if config.json was loaded
+        # Multi-line f-string built by adjacent string literals (Python concatenates them).
+        # `\n` is a newline; `cfg.get('x')` returns None if a key is absent.
         cfg_text = (
             f"Canonical demo configuration:\n"
             f"  N vessels = {cfg.get('n_vessels')}\n"
@@ -236,6 +280,8 @@ def _page_title(pdf, data: dict):
         ax.text(0.0, 0.18, cfg_text, fontsize=9, va="top", family="monospace",
                 color="#37474f")
 
+    # Append this finished figure as a new page, then close it to free memory.
+    # `;` just puts two statements on one line.
     pdf.savefig(fig); plt.close(fig)
 
 
@@ -244,6 +290,8 @@ def _page_formulation(pdf, data: dict):
     ax = fig.add_axes([0.08, 0.06, 0.84, 0.86])
     ax.axis("off")
 
+    # `r"""..."""` is a raw triple-quoted string: raw (`r`) means backslashes are literal
+    # (so `\` in the math isn't treated as an escape); triple quotes span many lines.
     body = r"""
 Sets and parameters
 
@@ -320,26 +368,32 @@ def _page_predictive(pdf, data: dict):
         fontsize=9, va="center",
     )
 
+    # Make a display copy so formatting numbers as strings doesn't alter the real table.
     show = table.copy()
+    # `.map(lambda v: f"{v:.2f}")` applies a tiny inline function to every cell:
+    # `lambda v: ...` is an anonymous function; `f"{v:.2f}"` formats v with 2 decimals.
     show["mae"] = show["mae"].map(lambda v: f"{v:.2f}")
     show["rmse"] = show["rmse"].map(lambda v: f"{v:.2f}")
     show["r2"] = show["r2"].map(lambda v: f"{v:.3f}")
     show["mape"] = show["mape"].map(lambda v: f"{v:.3f}")
-    show = show.drop(columns=["mae_std"])
-    show.columns = ["Model", "MAE (h)", "RMSE (h)", "R²", "MAPE"]
+    show = show.drop(columns=["mae_std"])  # drop the std column we don't display
+    show.columns = ["Model", "MAE (h)", "RMSE (h)", "R²", "MAPE"]  # rename for the header
     _table_axes(fig, [0.08, 0.55, 0.84, 0.30], show)
 
     # Bar charts: MAE and MAPE side-by-side
     ax_mae = fig.add_axes([0.10, 0.10, 0.36, 0.36])
     ax_mape = fig.add_axes([0.56, 0.10, 0.36, 0.36])
 
-    models = table["model"].tolist()
+    models = table["model"].tolist()  # model names as a plain Python list
+    # List comprehension building one color per model: blue for real models,
+    # grey for baselines (those whose name starts with "baseline").
     colors = ["#1f77b4" if not m.startswith("baseline") else "#9e9e9e" for m in models]
 
+    # `barh` = horizontal bar chart (one bar per model name on the y-axis).
     ax_mae.barh(models, table["mae"], color=colors, edgecolor="black", linewidth=0.4)
     ax_mae.set_xlabel("MAE (hours)")
     ax_mae.set_title("MAE by model", fontsize=10)
-    ax_mae.invert_yaxis()
+    ax_mae.invert_yaxis()  # put the best (top) row at the top instead of the bottom
     ax_mae.tick_params(axis="y", labelsize=7)
     ax_mae.grid(axis="x", alpha=0.3)
 
@@ -347,7 +401,7 @@ def _page_predictive(pdf, data: dict):
     ax_mape.set_xlabel("MAPE")
     ax_mape.set_title("MAPE by model", fontsize=10)
     ax_mape.invert_yaxis()
-    ax_mape.set_yticklabels([])
+    ax_mape.set_yticklabels([])  # hide y labels here (shared with the MAE chart on the left)
     ax_mape.grid(axis="x", alpha=0.3)
 
     pdf.savefig(fig); plt.close(fig)
@@ -379,14 +433,18 @@ def _page_dfl_method(pdf, data: dict):
 
     # Training trace plot
     trace = data.get("trace")
+    # Only draw if we actually have trace rows (guards against None and empty table).
     if trace is not None and len(trace) > 0:
         ax1 = fig.add_axes([0.10, 0.10, 0.78, 0.36])
+        # `"o-"` is a matplotlib style string: circle markers ("o") joined by a solid line ("-").
         ax1.plot(trace["epoch"], trace["train_loss"], "o-", color="#1f77b4",
                  label="Train loss (realised cost under true τ)")
         ax1.set_xlabel("Epoch")
         ax1.set_ylabel("Train loss", color="#1f77b4")
         ax1.tick_params(axis="y", labelcolor="#1f77b4")
         ax1.grid(alpha=0.3)
+        # `.twinx()` creates a second y-axis sharing the same x-axis, so two metrics
+        # with different scales (loss vs regret) can be plotted on one chart.
         ax2 = ax1.twinx()
         ax2.plot(trace["epoch"], trace["val_regret"], "s-", color="#d62728",
                  label="Val regret")
@@ -401,19 +459,24 @@ def _page_three_objectives(pdf, data: dict):
     fig = _new_page("Three objective values per instance — and the gaps")
     pto = data["pto_per"]
     dfl = data["dfl_per"]
+    # If either input file is missing, draw a placeholder page and bail out early.
     if pto is None or dfl is None:
         ax = fig.add_axes([0.08, 0.10, 0.84, 0.80]); ax.axis("off")
         ax.text(0.5, 0.5, "No per-instance data available", ha="center")
         pdf.savefig(fig); plt.close(fig); return
 
+    # `.to_numpy()` converts a DataFrame column into a plain numpy array for math/plotting.
     fi = pto["true_cost_fi_decision"].to_numpy()
     pto_cost = pto["true_cost_pred_decision"].to_numpy()
     dfl_cost = dfl["true_cost_pred_decision"].to_numpy()
 
     # Sort by FI cost ascending
+    # `np.argsort` returns the index order that would sort `fi` (smallest first).
     order = np.argsort(fi)
+    # Fancy indexing: `fi[order]` reorders the array by those indices. The same `order`
+    # is applied to all three arrays so the instances stay aligned across curves.
     fi_s, pto_s, dfl_s = fi[order], pto_cost[order], dfl_cost[order]
-    x = np.arange(len(fi))
+    x = np.arange(len(fi))  # x-positions 0,1,2,... one per validation instance
 
     ax_top = fig.add_axes([0.10, 0.55, 0.84, 0.36])
     ax_top.plot(x, fi_s, "o-", color="#2ca02c", label="FI optimum (true τ)",
@@ -430,9 +493,12 @@ def _page_three_objectives(pdf, data: dict):
 
     # Per-instance gap (regret) — paired bars
     ax_bot = fig.add_axes([0.10, 0.10, 0.84, 0.36])
+    # Regret = decision cost minus the full-information optimum. numpy subtracts
+    # arrays element-wise, so these stay one-value-per-instance.
     pto_regret = pto_s - fi_s
     dfl_regret = dfl_s - fi_s
     width = 0.4
+    # Shift PtO bars left and DFL bars right by half a bar width so the pair sits side by side.
     ax_bot.bar(x - width/2, pto_regret, width=width, color="#d62728",
                label="PtO regret", edgecolor="black", linewidth=0.3)
     ax_bot.bar(x + width/2, dfl_regret, width=width, color="#1f77b4",
@@ -462,16 +528,19 @@ def _page_regret_distribution(pdf, data: dict):
     ax_box = fig.add_axes([0.10, 0.55, 0.36, 0.36])
     bp = ax_box.boxplot([pto_r, dfl_r], labels=["PtO", "DFL"], patch_artist=True,
                          showmeans=True, meanline=True)
+    # `zip(a, b)` pairs items position-by-position: (box0, color0), (box1, color1).
+    # Color each box and make it semi-transparent.
     for patch, color in zip(bp["boxes"], ["#d62728", "#1f77b4"]):
         patch.set_facecolor(color); patch.set_alpha(0.4)
     ax_box.set_ylabel("Per-instance regret (weighted h)")
     ax_box.set_title("Regret distribution")
     ax_box.grid(alpha=0.3, axis="y")
 
-    # CDF
+    # CDF (empirical cumulative distribution: "fraction of instances with regret <= x")
     ax_cdf = fig.add_axes([0.56, 0.55, 0.36, 0.36])
     for arr, color, label in [(pto_r, "#d62728", "PtO"), (dfl_r, "#1f77b4", "DFL")]:
-        sorted_r = np.sort(arr)
+        sorted_r = np.sort(arr)  # x-values: regrets from smallest to largest
+        # y-values: 1/n, 2/n, ..., n/n -> the running fraction of points seen.
         p = np.arange(1, len(sorted_r) + 1) / len(sorted_r)
         ax_cdf.plot(sorted_r, p, color=color, linewidth=2, label=label)
     ax_cdf.set_xlabel("Per-instance regret (weighted h)")
@@ -481,14 +550,17 @@ def _page_regret_distribution(pdf, data: dict):
     ax_cdf.grid(alpha=0.3)
 
     # Statistics table
+    # Build a DataFrame from a dict of {column-name: list-of-cell-values}.
     stats = pd.DataFrame(
         {
             "PtO": [
                 f"{pto_r.mean():.2f}",
                 f"{np.median(pto_r):.2f}",
-                f"{pto_r.std(ddof=1):.2f}",
+                f"{pto_r.std(ddof=1):.2f}",  # ddof=1 = sample std (divide by n-1)
                 f"{pto_r.min():.2f}",
                 f"{pto_r.max():.2f}",
+                # `(pto_r > 0)` is a True/False array; `.mean()` of it = fraction True.
+                # Times 100 -> percentage of instances with positive regret.
                 f"{(pto_r > 0).mean()*100:.0f}%",
             ],
             "DFL": [
@@ -500,6 +572,8 @@ def _page_regret_distribution(pdf, data: dict):
                 f"{(dfl_r > 0).mean()*100:.0f}%",
             ],
         },
+        # `index=[...]` labels the rows. `.reset_index()` then turns those row labels
+        # into a real column, and `.rename(...)` titles that column "Statistic".
         index=["mean", "median", "std", "min", "max", "% with regret > 0"],
     ).reset_index().rename(columns={"index": "Statistic"})
 
@@ -516,6 +590,7 @@ def _page_decision_quality(pdf, data: dict):
         ax.text(0.5, 0.5, "No decision summary available", ha="center")
         pdf.savefig(fig); plt.close(fig); return
 
+    # Pairs of (raw CSV column name, friendly header). We only keep columns that exist.
     keep = [
         ("model", "Model"),
         ("weighted_cost_pred_decision_mean", "cost (pred)"),
@@ -527,16 +602,16 @@ def _page_decision_quality(pdf, data: dict):
         ("berth_utilization_pred", "util"),
         ("fi_assignment_overlap_pct", "FI assign overlap %"),
     ]
-    show = pd.DataFrame()
+    show = pd.DataFrame()  # start empty; add one formatted column per kept field
     for k, label in keep:
         if k in dec.columns:
             v = dec[k]
             if k == "model":
-                show[label] = v.astype(str)
+                show[label] = v.astype(str)  # keep model names as text
             elif "%" in label:
-                show[label] = v.map(lambda x: f"{x:.1f}")
+                show[label] = v.map(lambda x: f"{x:.1f}")  # 1 decimal for percentages
             else:
-                show[label] = v.map(lambda x: f"{x:.2f}")
+                show[label] = v.map(lambda x: f"{x:.2f}")  # 2 decimals for other numbers
     _table_axes(fig, [0.04, 0.55, 0.92, 0.30], show)
 
     # Diverging bar: DFL improvement over PtO on each metric (negative = better)
@@ -551,11 +626,16 @@ def _page_decision_quality(pdf, data: dict):
         ("weighted_cost_pred_decision_mean", "cost"),
     ]:
         if k in dec.columns and len(dec) >= 2:
+            # `dec["model"].str.contains("PtO")` is a boolean mask (True where the model
+            # name contains "PtO"); `dec.loc[mask, k]` selects column k for those rows;
+            # `.iloc[0]` takes the first match. Assumes one PtO row and one DFL row exist.
             pto_v = float(dec.loc[dec["model"].str.contains("PtO"), k].iloc[0])
             dfl_v = float(dec.loc[dec["model"].str.contains("DFL"), k].iloc[0])
             metrics.append(label)
-            # Pct improvement (negative = DFL better, positive = DFL worse)
+            # Pct improvement (negative = DFL better, positive = DFL worse).
+            # Guard against divide-by-zero when the PtO value is exactly 0.
             deltas.append(100 * (dfl_v - pto_v) / pto_v if pto_v != 0 else 0)
+    # One bar color per metric: blue if DFL improved (delta <= 0), red if it got worse.
     colors = ["#1f77b4" if d <= 0 else "#d62728" for d in deltas]
     ax_div.barh(metrics, deltas, color=colors, edgecolor="black", linewidth=0.4)
     ax_div.axvline(0, color="black", linewidth=0.6)
@@ -571,9 +651,10 @@ def _runtime_table_and_chart(pdf):
     """Page 8 — DBAP runtime. Reuses scripts/benchmark_dbb.py if not cached."""
     cache = RESULTS_DIR / "benchmark_dbb.csv"
     if cache.exists():
-        bench = pd.read_csv(cache)
+        bench = pd.read_csv(cache)  # reuse cached benchmark numbers if present
     else:
         # Hard-coded from the run we just did (kept in sync with benchmark_dbb.py).
+        # Building a DataFrame from a dict of {column: list-of-values}.
         bench = pd.DataFrame(
             {
                 "N": [5, 6, 8, 8, 10],
@@ -583,6 +664,8 @@ def _runtime_table_and_chart(pdf):
                 "dfl_5ep_30inst_s": [4.3, 4.2, 10.8, 10.1, 18.7],
             }
         )
+        # Save the fallback numbers so next run reads them from cache. `index=False`
+        # drops pandas' auto row-numbers so they don't become a stray CSV column.
         bench.to_csv(cache, index=False)
 
     fig = _new_page("DBAP solver runtime — Pyomo + Gurobi")
@@ -614,10 +697,12 @@ def _runtime_table_and_chart(pdf):
 
     # Per-solve plot
     ax = fig.add_axes([0.12, 0.10, 0.76, 0.36])
+    # `semilogy` = line plot with a logarithmic y-axis (good when values span orders of magnitude).
     ax.semilogy(bench["N"], bench["per_solve_med_ms"], "o-", color="#1f77b4",
                 linewidth=2, markersize=8, label="Median per-solve")
     ax.semilogy(bench["N"], bench["per_solve_mean_ms"], "s--", color="#ff7f0e",
                 linewidth=2, markersize=8, label="Mean per-solve")
+    # Annotate each point with its berth count (M). `_` ignores the row index.
     for _, row in bench.iterrows():
         ax.annotate(f"M={int(row['M'])}", (row["N"], row["per_solve_med_ms"]),
                     textcoords="offset points", xytext=(8, -3), fontsize=7)
@@ -636,11 +721,15 @@ def _page_conclusions(pdf, data: dict):
     ax.axis("off")
 
     table_pred = _build_predictive_table(data)
-    best_mae = table_pred["mae"].min()
+    best_mae = table_pred["mae"].min()  # smallest MAE in the table
     best_mape = table_pred["mape"].min()
+    # `.idxmin()` returns the index label of the smallest MAE; `.loc[idx, "model"]`
+    # then fetches that row's model name.
     best_model = table_pred.loc[table_pred["mae"].idxmin(), "model"]
 
     dec = data["decision"]
+    # Chained assignment: set all of these to None at once (default "not available").
+    # They get filled in below only if the data exists.
     pto_regret = pto_pct = dfl_regret = dfl_pct = None
     pto_mape = dfl_mape = None
     pto_make = dfl_make = None
@@ -659,6 +748,7 @@ def _page_conclusions(pdf, data: dict):
         pto_mape = pred.loc[pred["model"].str.contains("PtO"), "mape"].iloc[0]
         dfl_mape = pred.loc[pred["model"].str.contains("DFL"), "mape"].iloc[0]
 
+    # Build the page body incrementally; `+=` appends to the string.
     text = "Key findings\n"
     text += "============\n\n"
     text += (f"1. Best predictive model: {best_model} with MAE = {best_mae:.2f} h,\n"
@@ -671,6 +761,7 @@ def _page_conclusions(pdf, data: dict):
              "   We use Differentiable Black-Box (DBB) gradient estimation\n"
              "   (Pogancic et al., ICLR 2020).\n\n")
     if pto_regret is not None:
+        # diff < 0 means DFL has lower regret (better); pick wording by how big the gap is.
         diff = dfl_regret - pto_regret
         if diff < -0.5:
             verdict = (f"   DFL beats PtO on regret: {pto_pct:.2f}% → {dfl_pct:.2f}%\n"
@@ -718,11 +809,15 @@ def _page_conclusions(pdf, data: dict):
 # Main
 # ---------------------------------------------------------------------------
 
+# `def main() -> None:` declares the entry point; `-> None` means it returns nothing.
 def main() -> None:
-    data = _load_all_data()
+    data = _load_all_data()  # load every CSV/JSON once, up front
     out = RESULTS_DIR / "dfl_report.pdf"
+    # Create the output folder if it doesn't exist yet. `parents=True` makes any missing
+    # parent folders too; `exist_ok=True` means "don't error if it's already there".
     out.parent.mkdir(parents=True, exist_ok=True)
 
+    # Open the PDF once and add each page in order; `with` closes/saves it at the end.
     with PdfPages(out) as pdf:
         _page_title(pdf, data)
         _page_formulation(pdf, data)
@@ -734,8 +829,11 @@ def main() -> None:
         _runtime_table_and_chart(pdf)
         _page_conclusions(pdf, data)
 
+    # Report where the PDF landed and its size in KB (st_size is bytes; /1024 -> KB).
     print(f"Wrote {out} ({out.stat().st_size / 1024:.1f} KB)")
 
 
+# This block runs only when the file is executed directly (python build_report.py),
+# not when it is imported as a module. Standard Python entry-point guard.
 if __name__ == "__main__":
     main()
