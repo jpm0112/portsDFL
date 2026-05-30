@@ -7,12 +7,15 @@ The report is intended to be the human-readable companion to the trace,
 diagnostics sidecar, and per-cell predictive parquet.
 """
 
+# See figures.py for what `from __future__ import annotations` does (it makes
+# the type hints below behave as plain text). Same idea applies in this file.
 from __future__ import annotations
 
 import os
+# Ask JAX to compute in 64-bit floats; set only if not already configured.
 os.environ.setdefault("JAX_ENABLE_X64", "1")
 
-import json
+import json  # for reading the diagnostics sidecar (a JSON file).
 from pathlib import Path
 
 import arviz as az
@@ -22,10 +25,14 @@ import pandas as pd
 from .evaluation import EvalArtifacts
 
 
+# `dict[str, dict[str, float]]` hint: a dict whose values are themselves
+# dicts of float (model name -> {metric name -> value}).
 def _fmt_overall_metrics(metrics: dict[str, dict[str, float]]) -> str:
     """Markdown table of overall held-out metrics by model."""
     rows = []
     header = ["model", "mean LPD", "MAE (h)", "RMSE (h)", "CRPS (h)", "cov 50%", "cov 90%"]
+    # Each row is the model name plus its formatted metrics. f"{x:.3f}" formats
+    # the number to 3 decimals; ":.2f" to 2 decimals.
     for name, m in metrics.items():
         rows.append([
             name,
@@ -36,6 +43,8 @@ def _fmt_overall_metrics(metrics: dict[str, dict[str, float]]) -> str:
             f"{m['coverage_50']:.3f}",
             f"{m['coverage_90']:.3f}",
         ])
+    # Build a Markdown table: header row, a "---" separator row, then data rows.
+    # " | ".join(list) glues the cells with " | " between them.
     out = "| " + " | ".join(header) + " |\n"
     out += "|" + "|".join(["---"] * len(header)) + "|\n"
     for r in rows:
@@ -45,22 +54,29 @@ def _fmt_overall_metrics(metrics: dict[str, dict[str, float]]) -> str:
 
 def _fmt_per_size_bin(per_size_bin: pd.DataFrame) -> str:
     """Markdown table of metrics sliced by training-cell-size bucket."""
-    df = per_size_bin.copy()
+    df = per_size_bin.copy()  # copy so we don't mutate the caller's DataFrame.
+    # `.map(lambda x: ...)` applies a small inline function to every value in
+    # the column. `lambda x: f"{x:.3f}"` just formats each number as text.
     df["mean_lpd"] = df["mean_lpd"].map(lambda x: f"{x:.3f}")
     df["mae"] = df["mae"].map(lambda x: f"{x:.2f}")
     df["crps"] = df["crps"].map(lambda x: f"{x:.2f}")
     df["coverage_50"] = df["coverage_50"].map(lambda x: f"{x:.2f}")
     df["coverage_90"] = df["coverage_90"].map(lambda x: f"{x:.2f}")
-    return df.to_markdown(index=False)
+    return df.to_markdown(index=False)  # render the DataFrame as a Markdown table.
 
 
 def _summarize_taus(idata: az.InferenceData) -> str:
     """Markdown table of posterior mean / 5% / 95% for the global hyperparameters present."""
+    # Names we MIGHT want to report; different models define different subsets.
     candidates = [
         "alpha0", "tau_vessel", "tau_berth", "tau_service", "tau_vb",
         "sigma", "sigma_global", "nu",
     ]
+    # List comprehension: keep only candidates that actually exist in this
+    # model's posterior (avoids asking az.summary for missing variables).
     available = [v for v in candidates if v in idata.posterior.data_vars]
+    # `az.summary` computes posterior mean/SD plus a 90% highest-density
+    # interval (hdi_prob=0.9 -> the hdi_5%/hdi_95% columns) per parameter.
     summary = az.summary(idata, var_names=available, hdi_prob=0.9)[
         ["mean", "sd", "hdi_5%", "hdi_95%"]
     ].round(3)
@@ -75,10 +91,11 @@ def _build_recommendations(art: EvalArtifacts) -> list[str]:
         Each rule fires only if the corresponding metric crosses a
         threshold, so the punch list is data-driven rather than generic.
     """
-    recs: list[str] = []
-    m0 = art.metrics[art.model_key]
-    nopool = art.metrics["no_pool"]
+    recs: list[str] = []  # we accumulate recommendation strings here.
+    m0 = art.metrics[art.model_key]      # metrics for the hierarchical model.
+    nopool = art.metrics["no_pool"]      # metrics for the no-pooling baseline.
 
+    # Calibration check: is observed 90% coverage far from the nominal 0.90?
     if abs(m0["coverage_90"] - 0.9) > 0.05:
         if m0["coverage_90"] < 0.85:
             recs.append(
@@ -93,6 +110,8 @@ def _build_recommendations(art: EvalArtifacts) -> list[str]:
                 "hyperpriors or adding informative covariates would help."
             )
 
+    # Higher LPD (log predictive density) is better. If the baseline beats M0
+    # overall, flag it (the hierarchy should still help on sparse cells).
     if m0["mean_lpd"] < nopool["mean_lpd"]:
         recs.append(
             "Mean LPD on the test set favors the no-pooling baseline overall. "
@@ -100,11 +119,15 @@ def _build_recommendations(art: EvalArtifacts) -> list[str]:
             "If not, the partial pooling is over-shrinking; widen tau priors."
         )
 
+    # Boolean masking: each [...] inside the brackets is a True/False Series,
+    # `&` combines them row-wise, and the outer df[...] keeps matching rows.
+    # `.astype(str).str.contains(...)` finds the "very sparse" size bucket.
     sparse_row = art.per_size_bin[
         (art.per_size_bin["model"] == art.model_key)
         & (art.per_size_bin["n_train_bin"].astype(str).str.contains("very sparse"))
     ]
     if not sparse_row.empty:
+        # `.iloc[0]` grabs the first matching row's value by position.
         sparse_lpd = float(sparse_row["mean_lpd"].iloc[0])
         nopool_sparse = art.per_size_bin[
             (art.per_size_bin["model"] == "no_pool")
@@ -112,6 +135,7 @@ def _build_recommendations(art: EvalArtifacts) -> list[str]:
         ]
         if not nopool_sparse.empty:
             nopool_sparse_lpd = float(nopool_sparse["mean_lpd"].iloc[0])
+            # Positive gain = M0 predicts sparse cells better than no-pooling.
             gain = sparse_lpd - nopool_sparse_lpd
             recs.append(
                 f"Partial pooling gains {gain:+.2f} log-density per very-sparse "
@@ -122,6 +146,7 @@ def _build_recommendations(art: EvalArtifacts) -> list[str]:
     # M1 (covariates) recommendation: if MAE is still meaningful relative
     # to median observed, suggest adding TRG/draft covariates next.
     median_y = float(np.median(art.test_df["service_time_hours"]))
+    # MAE as a fraction of the typical (median) service time; > 40% is "large".
     if m0["mae"] / median_y > 0.4:
         recs.append(
             f"MAE = {m0['mae']:.1f} h is large relative to median test svc "
@@ -130,12 +155,14 @@ def _build_recommendations(art: EvalArtifacts) -> list[str]:
         )
 
     # Service-vs-vessel-vs-berth: which tau is biggest? -> actionability tip.
+    # A larger tau = that grouping explains more variance in log(svc).
     post = art.idata.posterior
     tau_means = {
         "vessel": float(post["tau_vessel"].mean()),
         "berth": float(post["tau_berth"].mean()),
         "service": float(post["tau_service"].mean()),
     }
+    # `max(dict, key=dict.get)` returns the KEY whose value is largest.
     biggest = max(tau_means, key=tau_means.get)
     recs.append(
         "Posterior tau means: " + ", ".join(f"{k}={v:.2f}" for k, v in tau_means.items())
@@ -169,16 +196,19 @@ def write_report(
         sliced metrics / calibration / hyperparameters / borrowed strength /
         tails / per-cell intervals / recommendations.
     """
+    # Read the diagnostics JSON file into a Python dict.
     diag = json.loads(diag_json_path.read_text(encoding="utf-8"))
 
-    n_train = len(art.train_df)
-    n_test = len(art.test_df)
+    n_train = len(art.train_df)  # number of training rows.
+    n_test = len(art.test_df)    # number of held-out test rows.
     enc = art.encoding
 
     # Figures live under outputs/figures/<model_key>/ so the relative path
     # from outputs/reports/ is ../figures/<model_key>/<name>.
+    # `Path(p).name` is just the filename portion of each figure path.
     figs_rel = {k: f"../figures/{art.model_key}/{Path(p).name}" for k, p in figures.items()}
 
+    # We build the report as a list of strings and join them at the very end.
     md: list[str] = []
     md.append(f"# {art.model_key} — evaluation report\n")
     md.append(
@@ -188,6 +218,13 @@ def write_report(
     )
 
     md.append("\n## 1. Data and model\n")
+    # The bullets below DESCRIBE the Bayesian model that was fit elsewhere (in
+    # fit.py); they are documentation text, not live computation. In words:
+    #   - Likelihood: log(service time) is Normal(mu, sigma) -> svc is Lognormal.
+    #   - mu is a sum of a global intercept plus group offsets for vessel/berth/
+    #     service (partial pooling shrinks each group toward the global mean).
+    #   - HalfNormal(0.5) is a positive-only prior on each group SD (tau).
+    #   - NUTS is the MCMC sampler PyMC uses to draw from the posterior.
     md.append(
         f"- Train rows: **{n_train}** (years 2020–{art.train_df['atraque_year'].max()})\n"
         f"- Test rows: **{n_test}** (year 2025)\n"
@@ -198,6 +235,11 @@ def write_report(
     )
 
     md.append("\n## 2. Convergence diagnostics\n")
+    # Standard MCMC health checks pulled from the diagnostics sidecar:
+    #   - R-hat near 1.0 means chains agree (converged); high values are bad.
+    #   - ESS (effective sample size) ~ how many independent draws you really
+    #     have; higher is better. "bulk" covers the center, "tail" the extremes.
+    #   - divergences flag places NUTS could not explore reliably; want 0.
     md.append(
         f"- max R-hat: **{diag['rhat_max']:.3f}** (threshold {diag['thresholds']['rhat_max']})\n"
         f"- min bulk ESS: **{diag['ess_bulk_min']:.0f}** (threshold {diag['thresholds']['ess_min']})\n"
@@ -209,7 +251,9 @@ def write_report(
     md.append("Marginal log(svc) replicated from the posterior overlays the observed density:\n")
     md.append(f"\n![PPC overlay]({figs_rel['ppc_overlay']})\n")
 
-    md.append("\n## 4. Held-out metrics (2025 hold-out, 661 vessel calls)\n")
+    # FIX: was hard-coded "661 vessel calls"; use the actual test row count so
+    # the heading never disagrees with the real hold-out size.
+    md.append(f"\n## 4. Held-out metrics (2025 hold-out, {n_test} vessel calls)\n")
     md.append("\n### Overall\n")
     md.append(_fmt_overall_metrics(art.metrics))
 
@@ -259,6 +303,7 @@ def write_report(
     md.append(f"\n![Cell intervals]({figs_rel['cell_intervals']})\n")
 
     md.append("\n## 8. Recommended next steps (data-driven)\n")
+    # Append each recommendation as a Markdown bullet point.
     for r in _build_recommendations(art):
         md.append(f"- {r}")
 
@@ -270,6 +315,8 @@ def write_report(
         "  (consumed by the downstream DFL berth allocation model)\n"
     )
 
+    # Make sure the output folder exists, then write all sections joined by
+    # blank lines into one Markdown file.
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text("\n".join(md), encoding="utf-8")
     return out_path
