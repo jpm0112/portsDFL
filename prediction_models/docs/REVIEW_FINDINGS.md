@@ -151,3 +151,38 @@ accidental edit during annotation that the agent repaired — verified intact + 
 All 13 scripts annotated: argparse (flags, `store_true`, mutually-exclusive groups), `sys.path`
 bootstrapping, `if __name__ == "__main__":`, the PtO/DFL pipeline steps, `@contextmanager`
 timing, and pandas/numpy/matplotlib/reportlab idioms.
+
+---
+
+## `prediction_models/tests/` (step D)
+
+No assertions were weakened or changed — comments only. The **17 BAP tests still pass** after
+annotation (`test_discrete_bap.py` 5 + `test_weekly_instance.py` 7 + `test_bap_windows.py` 5).
+
+### Bugs fixed
+- none (the user's rule: don't alter test logic/assertions; nothing was a clear collection-breaking bug).
+
+### Issues reported (test quality, not changed)
+- 🟡 **`test_encoders.py` · `test_train_only_target_encoding_no_leak`** — the docstring says it
+  verifies no leakage, but the only assertion checks `out_train.shape[1] == out_val.shape[1]`
+  (column counts). A *leaky* encoder would still pass. Either re-document it as a layout smoke
+  test or add a real leakage check (e.g. val encodings equal train-derived category means).
+- 🟡 **`test_discrete_bap.py`** — no `pytest.importorskip("pyepo")`/Gurobi guard, so without the
+  solver stack the whole module **errors at collection** instead of skipping (the new
+  `test_bap_windows.py` shows the guarded pattern). Also a hardcoded `size=5` instead of
+  `small_instance.n_vessels`, and an absolute `-5.0` MIP-gap slack that won't scale to larger
+  instances (prefer `0.005 * cost_fi + eps`).
+- ⚪ **`test_log_target.py`** — unused `mae` import; `test_log_target_improves_or_matches_mape`
+  only checks both MAPEs are finite (can't fail) — but that's intentional per its docstring.
+- ⚪ **`test_tabm.py` / `test_node.py`** — `test_uses_cuda_when_available` passes the train set as
+  the validation set (fine for a device smoke test); `save_load` round-trips don't assert
+  `path.exists()` after `save()`.
+- ⚪ **`conftest.py`** — `tiny_arrays`/`first_fold_arrays` return numpy *views* of session-scoped
+  arrays; safe today (tests only read), but a future test that mutates them would corrupt shared
+  state — add `.copy()` if that happens.
+
+### Commenting
+All 15 test files annotated for beginners: `test_*` auto-discovery, `@pytest.fixture` +
+fixtures-as-arguments + scope, bare `assert`, `pytest.approx`, `np.testing.assert_allclose`,
+`pytest.raises`, `pytest.importorskip`/`mark.skipif`/`mark.slow`, `tmp_path`, and the
+arrange–act–assert structure.
