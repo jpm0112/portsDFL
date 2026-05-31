@@ -8,30 +8,22 @@ Input:  data/BBDD limpia(1).xlsx -> sheet "Resume Naves Comerciales (4)"
 Output: output/training_dataset.csv
 """
 
-# `import` pulls in other code libraries so we can use their functions.
 import sys
 import os
-import numpy as np          # numpy = fast numeric arrays; we use np.select below.
-import pandas as pd         # pandas = tables ("DataFrames"); the main tool here.
+import numpy as np
+import pandas as pd
 
-# Add src directory to path for port_regions import.
-# __file__ is the path of THIS script. os.path.abspath makes it a full path,
-# os.path.dirname strips off the filename to get the folder. sys.path.insert(0, ...)
-# puts that folder at the front of Python's search list so the next import works
-# even when the script is run from a different working directory.
+# Add this script's directory to the path so port_regions imports regardless of cwd.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from port_regions import get_region  # imports just the get_region function from port_regions.py
+from port_regions import get_region
 
 # --- Configuration ---
-# os.path.join builds file paths using the right slash for the OS. ".." means
-# "go up one folder", so DATA_DIR points to the sibling "data" folder next to "src".
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 INPUT_FILE = os.path.join(DATA_DIR, "BBDD limpia(1).xlsx")
 SHEET_NAME = "Resume Naves Comerciales (4)"
 OUTPUT_FILE = os.path.join(DATA_DIR, "training_dataset.csv")
 
 # Column name mapping: Excel Spanish -> internal English.
-# A dict ({ } ) stores key: value pairs; here it maps old column names to new ones.
 COLUMN_MAP = {
     "Cód. nave": "vessel_code",
     "Nave": "vessel_name",
@@ -78,7 +70,6 @@ VESSEL_TYPE_GROUP = {
 }
 
 
-# `def name():` defines a function — a reusable block of code you call by name.
 def load_data():
     """
     Load and rename columns from the Excel source file.
@@ -86,15 +77,10 @@ def load_data():
     Output: DataFrame with renamed columns
     """
     print("Loading data from Excel...")
-    # pd.read_excel reads one sheet of an .xlsx file into a DataFrame (a table).
-    # engine="openpyxl" is the library pandas uses to actually open .xlsx files.
     df = pd.read_excel(INPUT_FILE, sheet_name=SHEET_NAME, engine="openpyxl")
-    # .rename(columns=...) returns a new table with columns renamed via the dict.
     df = df.rename(columns=COLUMN_MAP)
-    # An f-string (f"...") lets you drop variables inside { } directly into text.
-    # len(df) = number of rows; len(df.columns) = number of columns.
     print(f"  Loaded {len(df)} rows, {len(df.columns)} columns")
-    return df  # hand the table back to whoever called this function.
+    return df
 
 
 def compute_targets(df):
@@ -107,10 +93,6 @@ def compute_targets(df):
     Input:  DataFrame with timestamp columns
     Output: DataFrame with target columns added
     """
-    # Subtracting two datetime columns gives a Timedelta (a duration) per row.
-    # .dt is the accessor for datetime/duration methods; .total_seconds() turns the
-    # duration into seconds, and /3600 converts seconds to hours.
-    # df["new_col"] = ... creates (or overwrites) a column named "new_col".
     # Berth stay: last unmooring - first mooring
     df["estadia_sitio_hours"] = (
         (df["last_unmooring_datetime"] - df["first_mooring_datetime"])
@@ -123,8 +105,7 @@ def compute_targets(df):
         .dt.total_seconds() / 3600
     )
 
-    # Reference: total port stay including anchorage wait (a plain local variable,
-    # not a column, because the name has no df["..."] in front of it).
+    # Reference: total port stay including anchorage wait.
     estadia_puerto_hours = (
         (df["departure_datetime"] - df["arrival_datetime"])
         .dt.total_seconds() / 3600
@@ -152,17 +133,14 @@ def clean_data(df):
     """
     n_before = len(df)
 
-    # A comparison like (col_a < col_b) produces a True/False value per row
-    # (a "boolean mask"). .astype(int) turns True->1 and False->0 so we store a flag.
     # Flag quality issues before filtering
     df["quality_flag"] = (
         (df["dispatch_datetime"] < df["reception_datetime"]).astype(int)
     )
-    n_quality = df["quality_flag"].sum()  # .sum() of 1/0 flags counts the True rows.
+    n_quality = df["quality_flag"].sum()
 
-    # Remove berth stays under 2 hours. mask_short is a True/False column.
-    # NOTE: rows where estadia_sitio_hours is NaN compare as False here, so NaN
-    # (un-computable) berth stays are NOT dropped by this filter.
+    # NOTE: NaN estadia_sitio_hours compares as False here, so un-computable
+    # berth stays are NOT dropped by this filter.
     mask_short = df["estadia_sitio_hours"] < 2
     n_short = mask_short.sum()
 
@@ -170,9 +148,6 @@ def clean_data(df):
     mask_extreme = df["estadia_sitio_hours"] > 500
     n_extreme = mask_extreme.sum()
 
-    # df[mask] keeps only rows where mask is True. ~ flips True/False, and & is
-    # element-wise "and", so this keeps rows that are NOT short AND NOT extreme.
-    # .copy() makes an independent table to avoid pandas "SettingWithCopy" warnings.
     df = df[~mask_short & ~mask_extreme].copy()
 
     print(f"  Removed {n_short} records with berth stay < 2h")
@@ -194,31 +169,20 @@ def build_direct_features(df):
     Input:  DataFrame with raw columns
     Output: DataFrame with engineered direct features
     """
-    # .map(dict) looks each value up in the dict and replaces it; values not found
-    # become NaN, and .fillna("Other") then replaces those NaNs with "Other".
-    # Vessel type grouping
+    # Vessel type grouping (unmapped types -> "Other")
     df["vessel_type_group"] = df["vessel_type"].map(VESSEL_TYPE_GROUP).fillna("Other")
 
-    # .apply(func) runs func on every value in the column. lambda x: ... is a tiny
-    # one-line unnamed function (here, x is one agency string).
-    # str(x).split(" - ", 1) splits on the FIRST " - " into at most 2 pieces;
-    # [1] takes the second piece (the NAME); .strip() trims spaces. The
-    # `A if cond else B` part falls back to the whole string when there's no " - ".
-    # Parse agency name: "RUT - NAME" -> "NAME"
+    # Parse agency name: "RUT - NAME" -> "NAME"; fall back to the whole string.
     df["agency"] = df["agency_raw"].apply(
         lambda x: str(x).split(" - ", 1)[1].strip()
         if " - " in str(x) else str(x).strip()
     )
 
-    # .fillna(value) replaces missing (NaN) cells with the given value.
     # Fill missing categorical features
     df["shipping_line"] = df["shipping_line"].fillna("UNKNOWN")
     df["service_route"] = df["service_route"].fillna("UNKNOWN")
 
-    # Draft = how deep the hull sits. Mean of bow+stern, max of the two, and trim
-    # (stern minus bow, i.e. front-to-back tilt). df[["a","b"]].max(axis=1) takes the
-    # max ACROSS the two columns per row (axis=1 = across columns, not down rows).
-    # Draft features
+    # Draft = how deep the hull sits. Mean, max, and trim (stern minus bow tilt).
     df["draft_arrival_mean"] = (df["draft_arrival_bow"] + df["draft_arrival_stern"]) / 2
     df["max_arrival_draft"] = df[["draft_arrival_bow", "draft_arrival_stern"]].max(axis=1)
     df["draft_trim_arrival"] = df["draft_arrival_stern"] - df["draft_arrival_bow"]
@@ -233,14 +197,12 @@ def build_temporal_features(df):
     Input:  DataFrame with arrival_datetime column
     Output: DataFrame with temporal feature columns
     """
-    dt = df["arrival_datetime"]  # shorthand so we don't retype the long name.
-    # The .dt accessor pulls calendar parts out of a datetime column.
+    dt = df["arrival_datetime"]
     df["arrival_month"] = dt.dt.month          # 1-12
     df["arrival_day_of_week"] = dt.dt.weekday  # 0 = Monday ... 6 = Sunday
     df["arrival_hour"] = dt.dt.hour            # 0-23
     df["arrival_year"] = dt.dt.year
     df["quarter"] = dt.dt.quarter              # 1-4
-    # weekday >= 5 is True for Saturday(5)/Sunday(6); astype(int) -> 1 weekend, 0 weekday.
     df["is_weekend_arrival"] = (dt.dt.weekday >= 5).astype(int)
     return df
 
@@ -252,12 +214,9 @@ def build_region_features(df):
     Input:  DataFrame with origin_port and dest_port columns
     Output: DataFrame with origin_region and dest_region columns
     """
-    # .apply(get_region) runs the imported get_region() on each port name to get
-    # its geographic region (a named function instead of a lambda this time).
     df["origin_region"] = df["origin_port"].apply(get_region)
     df["dest_region"] = df["dest_port"].apply(get_region)
 
-    # (col == "Other").sum() counts how many rows fell into the "Other" bucket.
     n_other_origin = (df["origin_region"] == "Other").sum()
     n_other_dest = (df["dest_region"] == "Other").sum()
     if n_other_origin > 0:
@@ -277,25 +236,18 @@ def build_historical_features(df):
     Input:  DataFrame sorted by first_mooring_datetime
     Output: DataFrame with historical vessel features (NaN for first visits)
     """
-    # Sort the WHOLE table into time order so "earlier rows = earlier visits".
-    # reset_index(drop=True) renumbers rows 0,1,2,... and throws away the old index.
-    # This chronological order is what makes the leakage-safe logic below work, and
-    # it stays in effect for build_group_features() which runs next without re-sorting.
+    # Sort chronologically so "earlier rows = earlier visits". This order makes the
+    # leakage-safe logic below work, and it persists into build_group_features()
+    # which runs next without re-sorting.
     df = df.sort_values("first_mooring_datetime").reset_index(drop=True)
 
     # --- Per-vessel historical features ---
-    # .groupby("vessel_code")["estadia_sitio_hours"] splits the berth-stay column into
-    # one mini-series per vessel; later operations run within each vessel separately.
     grouped = df.groupby("vessel_code")["estadia_sitio_hours"]
 
-    # KEY ANTI-LEAKAGE PATTERN, read inside-out per vessel:
-    #   .expanding().mean()  = running average over rows 0..current (grows each row)
-    #   .shift(1)            = move every value DOWN one row, so each row now holds the
-    #                          stat from BEFORE it (the current row's own value is
-    #                          excluded; the first row of each vessel becomes NaN).
-    #   .transform(...)      = apply that per-group and glue results back to original rows.
-    # Result: a row only "sees" this vessel's PAST visits, never its own or future ones.
-    # Expanding mean/median/std shifted by 1 (exclude current row)
+    # KEY ANTI-LEAKAGE PATTERN: .expanding() is a running stat over rows 0..current;
+    # .shift(1) moves each value down one row so a row holds the stat from BEFORE it
+    # (its own value excluded; first row per vessel becomes NaN). A row only ever
+    # sees this vessel's PAST visits, never its own or future ones.
     df["vessel_avg_berth_stay"] = grouped.transform(
         lambda x: x.expanding().mean().shift(1)
     )
@@ -306,18 +258,13 @@ def build_historical_features(df):
         lambda x: x.expanding().std().shift(1)
     )
 
-    # .cumcount() numbers rows within each vessel group 0,1,2,...; here it equals how
-    # many PRIOR visits this vessel has had (0 = its first visit). No leakage: it counts
-    # past rows only.
-    # Visit count (0 = first visit, 1 = second, etc.)
+    # Visit count (0 = first visit, 1 = second, etc.; counts past rows only)
     df["vessel_visit_count"] = grouped.cumcount()
 
-    # .shift(1) within the group grabs the immediately previous visit's berth stay.
     # Last berth stay
     df["vessel_last_berth_stay"] = grouped.shift(1)
 
     # --- Per-vessel-terminal historical features ---
-    # Same idea but grouped by vessel AND terminal (a list of keys -> finer groups).
     grouped_vt = df.groupby(["vessel_code", "terminal"])["estadia_sitio_hours"]
 
     df["vessel_avg_berth_stay_at_terminal"] = grouped_vt.transform(
@@ -342,9 +289,9 @@ def build_group_features(df):
     Input:  DataFrame sorted chronologically
     Output: DataFrame with group-level feature columns
     """
-    # NOTE: this relies on df still being in first_mooring_datetime order from
-    # build_historical_features() (it is not re-sorted here). Same shift(1) trick:
-    # each row's group average uses only EARLIER rows in that group, never itself.
+    # NOTE: relies on df still being in first_mooring_datetime order from
+    # build_historical_features() (not re-sorted here). Same shift(1) trick: each
+    # row's group average uses only EARLIER rows in that group, never itself.
     # Type + terminal average
     df["type_terminal_avg_stay"] = (
         df.groupby(["vessel_type_group", "terminal"])["estadia_sitio_hours"]
@@ -377,11 +324,7 @@ def add_split_column(df):
     Input:  DataFrame with arrival_datetime
     Output: DataFrame with split column
     """
-    # np.select(conditions, choices, default) picks, for each row, the choice tied to
-    # the FIRST condition that is True (checked top to bottom), else the default.
-    # Comparing a datetime column to a date string ("2024-07-01") is fine: pandas
-    # parses the string to a timestamp automatically.
-    # So: arrival < 2024-07-01 -> "train"; else < 2025-03-01 -> "validation"; else "test".
+    # arrival < 2024-07-01 -> "train"; else < 2025-03-01 -> "validation"; else "test".
     conditions = [
         df["arrival_datetime"] < "2024-07-01",
         df["arrival_datetime"] < "2025-03-01",
@@ -389,7 +332,6 @@ def add_split_column(df):
     choices = ["train", "validation"]
     df["split"] = np.select(conditions, choices, default="test")
 
-    # Loop over the three split names and print how many rows landed in each.
     for s in ["train", "validation", "test"]:
         print(f"  {s}: {(df['split'] == s).sum()} rows")
     return df
@@ -473,8 +415,6 @@ def select_final_columns(df):
         "split",
     ]
 
-    # Joining lists with + concatenates them into one ordered list of column names.
-    # df[all_columns] selects only those columns, in that order (drops the rest).
     all_columns = targets + direct + temporal + historical + group + reference
     df = df[all_columns]
 
@@ -546,9 +486,7 @@ def main():
     print("\nSelecting final columns...")
     df = select_final_columns(df)
 
-    # os.makedirs creates the folder; exist_ok=True means "don't error if it already exists".
     os.makedirs(DATA_DIR, exist_ok=True)
-    # .to_csv writes the table to a CSV file. index=False drops the row-number column;
     # encoding="utf-8" keeps the Spanish accents (á, í, etc.) intact.
     df.to_csv(OUTPUT_FILE, index=False, encoding="utf-8")
     print(f"\nSaved to {OUTPUT_FILE}")
@@ -565,14 +503,11 @@ def main():
           f"max={df['estadia_sitio_hours'].max():.1f}")
     print(f"  tiempo_en_puerto     -> mean={df['tiempo_en_puerto_hours'].mean():.1f}, "
           f"median={df['tiempo_en_puerto_hours'].median():.1f}")
-    # .isna() marks missing cells as True; .sum() counts them. These should equal the
-    # number of first-ever visits (rows with no prior history to average).
+    # Should equal the number of first-ever visits (no prior history to average).
     print(f"  First visits (NaN vessel_avg): "
           f"{df['vessel_avg_berth_stay'].isna().sum()}")
     print(f"  Columns: {list(df.columns)}")
 
 
-# This guard means: only run main() when this file is executed directly
-# (python build_training_dataset.py), NOT when another file imports it.
 if __name__ == "__main__":
     main()

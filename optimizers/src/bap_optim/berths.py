@@ -22,15 +22,10 @@ source-faithful dataset) is the 7-class vessel grouping defined in
 
 from __future__ import annotations
 
-# `dataclass` is a decorator (see below) that auto-generates boilerplate
-# methods (__init__, __repr__, __eq__) for a class that mainly holds data.
 from dataclasses import dataclass
 
 import numpy as np
 
-# A tuple (round brackets) is an *immutable* sequence: once created, its
-# contents can't be changed. Using a tuple here signals "this list of groups
-# is a fixed constant". ALL-CAPS names are a Python convention for constants.
 # The 7 operational vessel-type groups (see src/build_clean_dataset.py).
 VESSEL_TYPE_GROUPS = (
     "Container",
@@ -43,10 +38,8 @@ VESSEL_TYPE_GROUPS = (
 )
 
 
-# `@dataclass` is a *decorator*: it wraps the class below and auto-writes the
-# constructor and helper methods from the field declarations. `frozen=True`
-# makes instances *immutable* (you can't reassign `.name` after creation) and,
-# as a bonus, makes them hashable so a Berth can live in a set or dict key.
+# frozen=True makes Berth hashable (frozenset field), so it can live in a set
+# or dict key.
 @dataclass(frozen=True)
 class Berth:
     """A berth (or terminal) and the vessel-type groups it can serve.
@@ -57,22 +50,11 @@ class Berth:
             can physically handle.
     """
 
-    # These two lines are *type-annotated fields*, not assignments. The
-    # dataclass decorator reads them and builds `__init__(self, name, served_types)`
-    # for you. `name: str` means "name is a string"; the annotation is a hint,
-    # Python does not enforce it at runtime.
     name: str
-    # `frozenset[str]` is the immutable cousin of `set`: an unordered collection
-    # of unique strings that can't be modified. It's used here because a frozen
-    # dataclass needs hashable (immutable) fields, and a regular `set` is not.
+    # frozenset (not set) so the frozen dataclass field stays hashable.
     served_types: frozenset[str]
 
-    # A *method*: a function defined inside a class. `self` is the instance the
-    # method is called on (e.g. in `berth.can_serve("X")`, self is `berth`).
-    # `-> bool` is the return-type hint: this returns True/False.
     def can_serve(self, vessel_type_group: str) -> bool:
-        # `in` does a membership test; on a (frozen)set this is a fast O(1)
-        # lookup, so checking compatibility is cheap.
         return vessel_type_group in self.served_types
 
 
@@ -83,10 +65,6 @@ class Berth:
 # an authoritative berth specification — confirm with the port before relying
 # on them operationally. Passenger / Other are routed to the multipurpose
 # terminal as a permissive fallback so no vessel is left without a berth.
-# `tuple[Berth, ...]` is a type hint meaning "a tuple of any number of Berth
-# objects" (the `...` literally means "and so on"). Each `Berth(...)` call runs
-# the auto-generated constructor. `{"Container"}` (curly braces) is a set
-# literal; `frozenset({...})` freezes it into the immutable form the field wants.
 DEFAULT_BERTHS: tuple[Berth, ...] = (
     Berth("STI", frozenset({"Container"})),
     Berth(
@@ -126,39 +104,23 @@ def derive_berths_from_history(
     """
     import pandas as pd  # local import: keep module importable without pandas
 
-    # `pd.crosstab` builds a contingency table: a 2-D count of how often each
-    # pair of values co-occurs. Here rows = berths, columns = vessel types, and
-    # each cell `ct.loc[berth, type]` = how many times that type was served at
-    # that berth. `df[berth_col]` selects one column of the DataFrame.
+    # Contingency table: rows = berths, columns = vessel types, cell = count
+    # of how many times that type was served at that berth.
     ct = pd.crosstab(df[berth_col], df[type_col])
-    berths: list[Berth] = []  # empty list we'll append to; type hint is just a note
-    # `ct.index` is the row labels (the distinct berth names). We sort so the
-    # output order is stable/deterministic.
+    berths: list[Berth] = []
     # FIX: was `sorted(ct.index.astype(str))`, which sorts STRINGIFIED labels
     # but then `ct.loc[name]` looks them up against the ORIGINAL index. If the
     # berth column is non-string (e.g. integer Sitio IDs), the string key
     # mismatches the int index and raises KeyError. Iterate the original index
     # values (sorted by their string form) so the .loc lookup always matches.
     for berth_key in sorted(ct.index, key=lambda x: str(x)):
-        # `ct.loc[berth_key]` selects that berth's row: a Series of per-type counts.
         row = ct.loc[berth_key]
-        # A *set comprehension*: build a frozenset by looping over the row.
-        # `row.items()` yields (column_label, count) pairs; we keep a type `t`
-        # only when its count `n` meets the threshold. `int(n)` guards against
-        # numpy integer types so the `>=` comparison behaves like plain ints.
+        # int(n) guards against numpy integer types in the >= comparison.
         served = frozenset(str(t) for t, n in row.items() if int(n) >= min_count)
-        # `str(berth_key)` normalises the stored name to a string regardless of
-        # the source column's dtype.
         berths.append(Berth(str(berth_key), served))
     return berths
 
 
-# The `|` in a type hint means "either type": `list[str] | np.ndarray` accepts
-# a Python list OR a numpy array. `berths=DEFAULT_BERTHS` is a default value
-# used when the caller omits it (safe here because the tuple is immutable —
-# beware mutable defaults like `[]` or `{}`, which are shared between calls).
-# The bare `*` marks everything after it as *keyword-only*: callers must write
-# `allow_unmatched=True`, not pass it positionally.
 def vessel_berth_compat(
     vessel_type_groups: list[str] | np.ndarray,
     berths: list[Berth] | tuple[Berth, ...] = DEFAULT_BERTHS,
@@ -181,43 +143,25 @@ def vessel_berth_compat(
     Returns:
         ndarray (N, B) of bool.
     """
-    # A *list comprehension*: a compact `for` loop that builds a list. This
-    # coerces every vessel-type entry to a string so comparisons are uniform.
     types = [str(t) for t in vessel_type_groups]
-    # Tuple unpacking: assign two variables at once. N = number of vessels,
-    # B = number of berths.
     N, B = len(types), len(berths)
-    # Pre-allocate an (N, B) array filled with False; we'll flip cells to True.
-    # `dtype=bool` makes it a boolean matrix (memory-efficient, and what the
-    # downstream BAP model expects).
     compat = np.zeros((N, B), dtype=bool)
-    # `enumerate` yields (index, value) pairs, so `i` is the vessel's row index
-    # and `t` is its type string.
     for i, t in enumerate(types):
-        # Build this vessel's compatibility row: one True/False per berth.
         row = np.array([berth.can_serve(t) for berth in berths], dtype=bool)
-        # `.any()` is True if at least one entry is True; `not row.any()` means
-        # this vessel's type matched NO berth in the catalog.
+        # This vessel's type matched NO berth in the catalog.
         if not row.any():
             if allow_unmatched:
-                # `row[:] = True` is numpy slice-assignment: set every element
-                # to True (route the vessel to all berths as a fallback).
-                row[:] = True
+                row[:] = True  # permissive fallback: route to all berths
             else:
-                # f-string (the `f"..."` prefix) lets `{expr}` embed values.
-                # `{t!r}` uses repr() so the type is shown quoted, e.g. 'Foo'.
                 raise ValueError(
                     f"Vessel {i} of type {t!r} is served by no berth in the catalog "
                     f"({[b.name for b in berths]}). Pass allow_unmatched=True to "
                     f"route it to all berths, or extend the catalog."
                 )
-        # Write the finished row into row `i` of the matrix.
         compat[i] = row
     return compat
 
 
 def berth_names(berths: list[Berth] | tuple[Berth, ...] = DEFAULT_BERTHS) -> list[str]:
     """Convenience: the ordered list of berth names (column order of compat)."""
-    # List comprehension that pulls the `.name` out of each Berth, preserving
-    # order so the names line up with the columns of the compat matrix above.
     return [b.name for b in berths]

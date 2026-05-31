@@ -17,21 +17,12 @@ Input:  data/BBDD limpia(1).xlsx -> sheet "Resume Naves Comerciales (4)"
 Output: data/clean_dataset.csv   (5,597 rows x 28 columns, UTF-8)
 """
 
-# `import` makes another library's code available here.
-# `os` = operating-system helpers (file paths, folders). `pd` is the standard
-# nickname (alias) people give pandas; `as pd` lets us type `pd` instead of `pandas`.
 import os
 import pandas as pd
 
 # --- Configuration -------------------------------------------------------
 
-# Build the path to the `data` folder relative to THIS script, so the script
-# works no matter what folder you run it from.
-#   __file__               = path of this .py file
-#   os.path.abspath(...)   = turn it into a full absolute path
-#   os.path.dirname(...)   = take just the folder that contains the file
-#   os.path.join(a, b, ..) = glue path pieces with the right slash for the OS
-#   ".."                   = "go up one folder" (from src/ up to the repo root)
+# Path to the `data` folder relative to this script, so it works from any cwd.
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 INPUT_FILE = os.path.join(DATA_DIR, "BBDD limpia(1).xlsx")
 SHEET_NAME = "Resume Naves Comerciales (4)"
@@ -46,8 +37,6 @@ MAX_BERTH_HOURS = 500
 # period-style shorthands (e.g. "L. naviera") that are ambiguous to anyone
 # not familiar with the source. Expanding them once here keeps every
 # downstream artefact self-explanatory.
-# A dict (dictionary) is a lookup table of {key: value} pairs. Here each key is
-# the old (abbreviated) column name and each value is the new (full) name.
 ABBREVIATION_MAP = {
     "Cód. nave": "Código nave",
     "T. nave": "Tipo nave",
@@ -70,7 +59,6 @@ FECHA_RENAME = {"Fecha": "Fecha (solicitud)"}
 #   - `Nave` is the vessel name; `Código nave` (IMO number) is the unique,
 #     stable identifier. 28 vessels appear in the data under more than one
 #     name (renames during the period), so always group by `Código nave`.
-# A list is an ordered collection written with square brackets [].
 COLUMNS_TO_DROP = ["Año", "Mes", "Nave"]
 
 # EPSA and QC label the same physical liquid-bulk berth (Sitio 9). EPSA
@@ -78,7 +66,6 @@ COLUMNS_TO_DROP = ["Año", "Mes", "Nave"]
 # then a private concessionaire (QC) took over later that year. 11 vessels
 # appear in both Terminal labels, confirming it's the same berth. The site
 # label is also stored inconsistently ("9" vs "Sitio 9"). Normalise both.
-# Small lookup tables used later to rewrite values (old -> new).
 TERMINAL_MERGE = {"EPSA": "QC"}
 SITE_NORMALISE = {"9": "Sitio 9"}
 
@@ -132,8 +119,6 @@ VESSEL_TYPE_GROUPS = {
 
 # --- Pipeline steps ------------------------------------------------------
 
-# `def name(args):` defines a function. Everything indented under it is its body.
-# A function that takes no arguments still needs the empty parentheses.
 def load_source():
     """
     Load the full BBDD limpia sheet without any modification.
@@ -141,13 +126,9 @@ def load_source():
     Output: DataFrame with all 31 original Spanish columns, 5,605 rows.
     """
     print("Loading data from Excel...")
-    # pd.read_excel reads one worksheet into a DataFrame (a table). `engine`
-    # picks the library that actually parses .xlsx files (openpyxl).
     df = pd.read_excel(INPUT_FILE, sheet_name=SHEET_NAME, engine="openpyxl")
-    # An f-string (the f"" prefix) lets you drop variables straight into text
-    # inside {curly braces}. len(df) = number of rows; len(df.columns) = columns.
     print(f"  Loaded {len(df)} rows, {len(df.columns)} columns")
-    return df  # hand the table back to whoever called this function
+    return df
 
 
 def filter_anomalies(df):
@@ -161,23 +142,13 @@ def filter_anomalies(df):
     """
     n_before = len(df)
 
-    # `Estadía sitio` is a Timedelta (a duration). `.dt` is the accessor for
-    # date/time operations on a whole column; `.total_seconds()` turns each
-    # duration into a number of seconds, and /3600 converts seconds -> hours.
     estadia_hours = df["Estadía sitio"].dt.total_seconds() / 3600
-    # Comparing a column to a number produces a boolean "mask": one True/False
-    # per row. These mark the rows that are too short / too long.
     mask_short = estadia_hours < MIN_BERTH_HOURS
     mask_extreme = estadia_hours > MAX_BERTH_HOURS
 
-    # On a boolean Series, .sum() counts the Trues. int(...) makes it a plain int.
     n_short = int(mask_short.sum())
     n_extreme = int(mask_extreme.sum())
 
-    # `|` = element-wise OR (row is bad if short OR extreme); `~` = NOT, so we
-    # keep the rows that are NOT bad. df.loc[mask] selects rows where mask is True.
-    # .copy() returns an independent table so later edits don't warn about / leak
-    # into the original DataFrame (avoids pandas' SettingWithCopy warning).
     df = df.loc[~(mask_short | mask_extreme)].copy()
 
     print(f"  Removed {n_short} records with berth stay < {MIN_BERTH_HOURS}h")
@@ -200,11 +171,10 @@ def filter_unmoor_after_departure(df):
     Output: DataFrame with the bad rows removed.
     """
     n_before = len(df)
-    # Compare two datetime columns row-by-row: True where the last mooring line
-    # was released AFTER departure, which is physically impossible (a typo).
+    # Last mooring line released AFTER departure is physically impossible (a typo).
     bad = df["Última espía desatraque"] > df["Zarpe"]
     n_bad = int(bad.sum())
-    df = df.loc[~bad].copy()  # keep only the rows that are NOT bad
+    df = df.loc[~bad].copy()
     print(f"  Removed {n_bad} rows where 'Última espía desatraque' > 'Zarpe'")
     print(f"  Rows: {n_before} -> {len(df)}")
     return df
@@ -220,16 +190,11 @@ def expand_abbreviations(df):
     Input:  DataFrame with abbreviated column names.
     Output: DataFrame with the 8 columns in ABBREVIATION_MAP renamed.
     """
-    # This is a "list comprehension": a compact way to build a list. Read it as
-    # "for every key k in ABBREVIATION_MAP, keep k if it is NOT in df.columns".
-    # The result is the list of expected columns that the sheet is missing.
     missing = [k for k in ABBREVIATION_MAP if k not in df.columns]
-    if missing:  # a non-empty list is "truthy", so this runs only if something is missing
-        # `raise` stops the program with an error. Better to fail loudly here
-        # than to silently produce a wrong file if the source schema changed.
+    if missing:
+        # Fail loudly rather than silently produce a wrong file if the schema changed.
         raise KeyError(f"Source sheet is missing expected columns: {missing}")
     print(f"  Renaming {len(ABBREVIATION_MAP)} abbreviated columns")
-    # .rename(columns=mapping) returns a copy with renamed columns (old -> new).
     return df.rename(columns=ABBREVIATION_MAP)
 
 
@@ -243,8 +208,7 @@ def rename_fecha_to_solicitud(df):
     Input:  DataFrame with a single column literally named `Fecha`.
     Output: DataFrame with that column renamed to `Fecha (solicitud)`.
     """
-    # .count("Fecha") counts how many columns are literally named "Fecha".
-    # `!=` means "not equal". We expect exactly one; anything else is a bug.
+    # Expect exactly one column literally named "Fecha"; anything else is a bug.
     if list(df.columns).count("Fecha") != 1:
         raise ValueError("Expected exactly one column named 'Fecha'.")
     print("  Renaming 'Fecha' -> 'Fecha (solicitud)'")
@@ -264,7 +228,6 @@ def drop_redundant_columns(df):
     if missing:
         raise KeyError(f"Cannot drop missing columns: {missing}")
     print(f"  Dropping {len(COLUMNS_TO_DROP)} redundant columns: {COLUMNS_TO_DROP}")
-    # .drop(columns=[...]) returns a copy with those columns removed.
     return df.drop(columns=COLUMNS_TO_DROP)
 
 
@@ -281,8 +244,6 @@ def normalise_terminal_and_site(df):
     # Count EPSA rows BEFORE renaming them (afterwards there are none left).
     n_epsa = (df["Terminal"] == "EPSA").sum()
     df = df.copy()
-    # .replace(mapping) swaps any value found as a key with its mapped value;
-    # values not in the mapping are left unchanged. Here: every "EPSA" -> "QC".
     df["Terminal"] = df["Terminal"].replace(TERMINAL_MERGE)
 
     # Cast Sitio to string first: BBDD stores the EPSA-era value as integer 9
@@ -294,13 +255,10 @@ def normalise_terminal_and_site(df):
     # (not "9"), which would make the "== '9'" check below silently match nothing.
     # See REPORTED items — left as-is because the source dtype can't be verified.
     df["Sitio"] = df["Sitio"].astype(str)
-    # Select the rows whose Sitio is the raw "9" so we can sanity-check them.
+    # Sanity-check: every raw "9" Sitio must belong to QC before we rename it.
     bad_sites = df.loc[df["Sitio"] == "9"]
-    # .eq("QC") -> True/False per row; .all() -> True only if every row is QC.
-    # `not ... .all()` means "at least one '9' row is NOT in QC" -> abort.
     if not bad_sites["Terminal"].eq("QC").all():
         raise ValueError("Found 'Sitio = 9' outside the QC terminal — refusing to rename.")
-    # Only now rewrite the verified "9" labels to the canonical "Sitio 9".
     df["Sitio"] = df["Sitio"].replace(SITE_NORMALISE)
 
     print(f"  Merged {n_epsa} EPSA rows into QC")
@@ -319,18 +277,14 @@ def normalise_linea_and_servicio(df):
     Input:  DataFrame with `Línea naviera` and `Servicio` columns.
     Output: DataFrame with name variants merged and NaNs replaced.
     """
-    # .isin(collection) -> True where the value is one of the collection's
-    # members. Iterating a dict yields its KEYS, so this counts rows whose value
-    # is one of the duplicate names we intend to merge. .isna() flags missing
-    # (NaN) cells. These counts are only for the printed summary below.
+    # Counts for the printed summary only.
     n_lin_dup  = df["Línea naviera"].isin(LINEA_NAME_MAP).sum()
     n_serv_dup = df["Servicio"].isin(SERVICIO_NAME_MAP).sum()
     n_lin_na   = df["Línea naviera"].isna().sum()
     n_serv_na  = df["Servicio"].isna().sum()
 
     df = df.copy()
-    # Two chained steps: first .replace() merges the duplicate name variants,
-    # then .fillna(label) replaces remaining missing values with a meaningful
+    # Merge duplicate name variants, then fill remaining blanks with a meaningful
     # label (these blanks are real "not on a liner service", not lost data).
     df["Línea naviera"] = df["Línea naviera"].replace(LINEA_NAME_MAP).fillna(NON_LINER_LABEL)
     df["Servicio"]      = df["Servicio"].replace(SERVICIO_NAME_MAP).fillna(NO_SERVICE_LABEL)
@@ -353,33 +307,22 @@ def add_vessel_type_group(df):
     Input:  DataFrame with `Tipo nave` populated.
     Output: DataFrame with `Tipo nave (agrupado)` placed next to its source.
     """
-    # A set is an unordered collection of unique values. .dropna() removes
-    # missing values, .unique() lists the distinct raw types. set(dict) is the
-    # set of the dict's KEYS. The `-` is set difference: raw types that have no
-    # entry in our mapping. If any exist, they'd map to NaN -> fail loudly.
+    # Raw types with no mapping entry would map to NaN -> fail loudly instead.
     unmapped = set(df["Tipo nave"].dropna().unique()) - set(VESSEL_TYPE_GROUPS)
     if unmapped:
         raise ValueError(f"Vessel types missing from VESSEL_TYPE_GROUPS: {unmapped}")
 
     df = df.copy()
-    # .map(dict) looks each value up in the dict and returns the mapped result,
-    # building the new grouped column from the raw `Tipo nave` column.
     df["Tipo nave (agrupado)"] = df["Tipo nave"].map(VESSEL_TYPE_GROUPS)
 
     # Reorder columns so the new group sits right after its source column.
-    cols = list(df.columns)            # current column order as a plain list
-    cols.remove("Tipo nave (agrupado)")  # pull the new column out of the list
-    # .index(x) finds x's position; +1 = the slot just after "Tipo nave".
-    # list.insert(position, value) puts the column name back at that slot.
+    cols = list(df.columns)
+    cols.remove("Tipo nave (agrupado)")
     cols.insert(cols.index("Tipo nave") + 1, "Tipo nave (agrupado)")
-    df = df[cols]                      # df[list_of_columns] reorders the table
+    df = df[cols]
 
-    # .value_counts() counts how many rows fall in each group (most common first).
     counts = df["Tipo nave (agrupado)"].value_counts()
     print(f"  Added 'Tipo nave (agrupado)' with {len(counts)} groups:")
-    # .items() yields (key, value) pairs; here (group name, row count).
-    # The format specs pad/align the output: {group:18s} = left-justified text
-    # in 18 chars, {n:5d} = integer in 5 chars, {..:5.2f} = float, 2 decimals.
     for group, n in counts.items():
         print(f"    {group:18s} {n:5d}  ({n/len(df)*100:5.2f}%)")
     return df
@@ -403,36 +346,26 @@ def force_consistent_vessel_type_group(df):
     Output: DataFrame with each vessel's group set to a single value.
     """
     df = df.copy()
-    # .groupby(key)[col].nunique() = for each vessel code, how many DISTINCT
-    # groups it was labelled with. >1 means the vessel's calls disagree.
+    # Per vessel, count distinct groups; >1 means the vessel's calls disagree.
     vt = df.groupby("Código nave")["Tipo nave (agrupado)"].nunique()
-    # vt[vt > 1] keeps only the disagreeing vessels; .index = their codes;
-    # .tolist() turns that Index into an ordinary Python list to loop over.
     inconsistent = vt[vt > 1].index.tolist()
     n_changed = 0
-    for code in inconsistent:  # handle one ambiguous vessel at a time
-        # All row positions for this vessel, sorted earliest-arrival first.
+    for code in inconsistent:
         sub_idx = df.index[df["Código nave"] == code]
         sorted_groups = df.loc[sub_idx].sort_values("Fecha arribo")["Tipo nave (agrupado)"]
-        counts = sorted_groups.value_counts()  # how often each group appears
-        top = counts.iloc[0]                   # the highest count (.iloc = by position)
-        tied = counts[counts == top].index.tolist()  # group(s) sharing that top count
+        counts = sorted_groups.value_counts()
+        top = counts.iloc[0]
+        tied = counts[counts == top].index.tolist()
         if len(tied) == 1:
-            chosen = tied[0]  # clear winner: the single most common group
+            chosen = tied[0]
         else:
             # Tie-break by chronological order: first vessel arrival wins.
-            # `next(generator)` returns the FIRST item that matches: walk the
-            # chronologically-sorted groups and pick the first one that is tied.
             chosen = next(v for v in sorted_groups if v in tied)
-        # Rows of THIS vessel whose group differs from the chosen one. `&` is
-        # element-wise AND; each side must be parenthesised because of operator
-        # precedence in pandas boolean masks.
         rows_to_change = (df["Código nave"] == code) & (df["Tipo nave (agrupado)"] != chosen)
         n_now = int(rows_to_change.sum())
         if n_now > 0:
-            # df.loc[mask, column] = value writes `value` into matching rows only.
             df.loc[rows_to_change, "Tipo nave (agrupado)"] = chosen
-            n_changed += n_now  # `+=` adds in place (running total)
+            n_changed += n_now
     print(f"  Forced consistent group for {len(inconsistent)} vessel(s); {n_changed} rows changed")
     return df
 
@@ -443,24 +376,14 @@ def _conditional_local_gap(clean, end_col, start_col):
     rows, grouped by `(Tipo nave (agrupado), Terminal)`. Returns the per-cell
     series and the global mean as a fallback for cells with no observations.
     """
-    # A leading underscore (e.g. _conditional_local_gap) is a convention meaning
-    # "internal helper" — not part of the public interface.
-    # Subtract two datetime columns -> a Timedelta column; convert to seconds.
     secs = (clean[end_col] - clean[start_col]).dt.total_seconds()
-    # .groupby([keyA, keyB]).mean() averages within each (vessel-group, terminal)
-    # combination. The result is indexed by those (type, terminal) pairs.
     grp = secs.groupby([clean["Tipo nave (agrupado)"], clean["Terminal"]]).mean()
-    # Returning two values makes a tuple: (per-cell means, overall mean).
     return grp, secs.mean()
 
 
 def _lookup_gap(grp_means, global_mean, type_grp, terminal):
     """Group-conditional mean with global fallback when the cell is empty."""
-    # .get(key) returns the value for that key, or None if the key is absent
-    # (no rows for that type/terminal combination).
     val = grp_means.get((type_grp, terminal))
-    # pd.isna(x) is True for missing values (NaN/NaT). If the cell is empty or
-    # missing, fall back to the dataset-wide average instead.
     if val is None or pd.isna(val):
         return global_mean
     return val
@@ -498,11 +421,9 @@ def fix_ordering_violations(df):
     """
     df = df.copy()
 
-    # Boolean masks flagging the two impossible orderings (arrival after the
-    # pilot berthed it; reception after dispatch). True = a violating row.
+    # The two impossible orderings: arrival after pilot berthed it; reception after dispatch.
     mask_v1 = df["Fecha arribo"] > df["Fecha práctico atraque"]
     mask_v2 = df["Fecha recepción nave"] > df["Fecha despacho nave"]
-    # Tuple unpacking: assign two values at once from the right-hand tuple.
     n_v1, n_v2 = int(mask_v1.sum()), int(mask_v2.sum())
     if n_v1 + n_v2 == 0:
         print("  No V1/V2 ordering violations to repair")
@@ -518,25 +439,18 @@ def fix_ordering_violations(df):
 
     # Imputed timestamps are floored to the minute to match the source-data
     # granularity (every BBDD timestamp is recorded with HH:MM:00 seconds).
-    # A nested function defined inside another is a small local helper.
-    # .floor("min") rounds a timestamp DOWN to the start of its minute.
     def _floor_to_minute(ts):
         return ts.floor("min")
 
-    # df.index[mask] gives the index labels of the violating rows. We loop over
-    # them one at a time and repair each row in place.
     for idx in df.index[mask_v1]:
-        r = df.loc[idx]  # df.loc[label] selects that single row as a Series
+        r = df.loc[idx]
         type_grp, term = r["Tipo nave (agrupado)"], r["Terminal"]
         pilot, first_espia = r["Fecha práctico atraque"], r["1era espía atraque"]
-        # abs(...) = absolute value; how far the pilot time sits from the first
-        # mooring line, in hours. A big gap fingers the pilot time as the typo.
+        # A big pilot-to-first-mooring gap fingers the pilot time as the typo.
         pilot_to_first_h = abs((first_espia - pilot).total_seconds()) / 3600
         if pilot_to_first_h > 6:
             # Pilot is the typo: rebuild it just before the first mooring line.
             gap = _lookup_gap(g_first_pilot, glob_first_pilot, type_grp, term)
-            # pd.Timedelta(seconds=gap) is a duration; subtracting it shifts the
-            # timestamp earlier. df.at[label, col] = ... writes ONE cell fast.
             df.at[idx, "Fecha práctico atraque"] = _floor_to_minute(first_espia - pd.Timedelta(seconds=gap))
         else:
             # Arrival is the typo: rebuild it just before the pilot berthing.
@@ -548,9 +462,8 @@ def fix_ordering_violations(df):
         type_grp, term = r["Tipo nave (agrupado)"], r["Terminal"]
         last_at, rec   = r["Última espía atraque"], r["Fecha recepción nave"]
         desp, pilot_ds = r["Fecha despacho nave"], r["Fecha práctico desatraque"]
-        # For each side, measure how abnormal its gap is (hours beyond a 3h
-        # tolerance). max(0.0, ...) clamps small/normal gaps to 0 so only the
-        # genuinely anomalous side scores. The larger score is the likely typo.
+        # Score each side's anomaly (hours beyond a 3h tolerance, clamped at 0);
+        # the larger score is the likely typo.
         rec_anomaly  = max(0.0, abs((rec - last_at).total_seconds()) / 3600 - 3)
         desp_anomaly = max(0.0, abs((pilot_ds - desp).total_seconds()) / 3600 - 3)
         if rec_anomaly >= desp_anomaly:
@@ -570,9 +483,6 @@ def fix_ordering_violations(df):
 
 def main():
     """Pipeline: load, filter, rename, drop, group, save."""
-    # Each step takes a DataFrame and returns the transformed DataFrame, so we
-    # keep reassigning `df` to thread the table through the whole pipeline.
-    # "=" * 60 repeats the string 60 times to draw a separator line.
     print("=" * 60)
     print("BAP - Clean Source Dataset Builder")
     print("=" * 60)
@@ -609,25 +519,16 @@ def main():
     print("\n[10/10] Repairing V1/V2 ordering violations...")
     df = fix_ordering_violations(df)
 
-    # makedirs creates the output folder; exist_ok=True means "don't error if
-    # it already exists". df.to_csv writes the table; index=False drops pandas'
-    # automatic row-number column so the CSV only holds real data columns.
     os.makedirs(DATA_DIR, exist_ok=True)
     df.to_csv(OUTPUT_FILE, index=False, encoding="utf-8")
     print(f"\nSaved to {OUTPUT_FILE}")
-    # df.shape is a (rows, columns) tuple; [0] = rows, [1] = columns.
     print(f"  Shape: {df.shape[0]} rows x {df.shape[1]} columns")
     print(f"  Size:  {os.path.getsize(OUTPUT_FILE) / 1024:.0f} KB")
 
     print("\nFinal columns (in output order):")
-    # enumerate(seq, start=1) yields (1, first), (2, second), ... so we get a
-    # human-friendly 1-based number alongside each column name.
     for i, col in enumerate(df.columns, start=1):
         print(f"  {i:2d}. {col}")
 
 
-# This guard means "only run main() when this file is executed directly"
-# (e.g. `python build_clean_dataset.py`), NOT when it is imported by another
-# script. __name__ equals "__main__" only in the direct-run case.
 if __name__ == "__main__":
     main()

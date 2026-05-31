@@ -5,20 +5,19 @@ Generate observations where each vessel type has its own sigma multiplier;
 fit M3, assert that the posterior recovers the dispersion pattern.
 """
 
-# Makes type-hint syntax lazy so newer annotations work everywhere (see other tests).
 from __future__ import annotations
 
-import arviz as az          # ArviZ: diagnostics/summaries for the MCMC output
-import numpy as np          # arrays, random sampling, correlation
-import pandas as pd         # DataFrame (the model's input table)
-import pymc as pm           # PyMC: builds the model and runs MCMC
+import arviz as az
+import numpy as np
+import pandas as pd
+import pymc as pm
 
-from src.data_prep import Encoding                      # category->index lookup dataclass
-from src.models.bhm_heteroscedastic import build_model  # builds the M3 model under test
+from src.data_prep import Encoding
+from src.models.bhm_heteroscedastic import build_model
 
 
-# True data-generating constants. Here each VESSEL TYPE gets its own noise spread,
-# which is the heteroscedastic ("non-constant variance") effect M3 should recover.
+# Each VESSEL TYPE gets its own noise spread, the heteroscedastic effect M3
+# should recover.
 N_VESSEL = 6
 N_BERTH = 6
 N_SERVICE = 10
@@ -35,34 +34,24 @@ TRUE_SIGMA_MULT = np.array([0.6, 0.8, 1.0, 1.2, 1.4, 1.6])
 HDI_PROB = 0.94
 
 
-# Private helper (leading "_"); returns a (DataFrame, Encoding) tuple.
 def _generate_synthetic() -> tuple[pd.DataFrame, Encoding]:
-    # Seeded generator => identical fake data every run (reproducible test).
     rng = np.random.default_rng(RANDOM_SEED)
-    # True group offsets: standard normals scaled by each true tau.
     alpha_v = TRUE_TAU_VESSEL * rng.standard_normal(N_VESSEL)
     alpha_b = TRUE_TAU_BERTH * rng.standard_normal(N_BERTH)
     alpha_s = TRUE_TAU_SERVICE * rng.standard_normal(N_SERVICE)
-    # Per-vessel noise sd = global sd times each vessel's multiplier (elementwise).
     sigma_v = TRUE_SIGMA_GLOBAL * TRUE_SIGMA_MULT  # per vessel sigma
 
-    # Random group membership per observation (low inclusive, high exclusive).
     v_idx = rng.integers(0, N_VESSEL, size=N_OBS)
     b_idx = rng.integers(0, N_BERTH, size=N_OBS)
     s_idx = rng.integers(0, N_SERVICE, size=N_OBS)
-    # True mean of log(service time) for each row.
     mu = TRUE_ALPHA0 + alpha_v[v_idx] + alpha_b[b_idx] + alpha_s[s_idx]
-    # Gaussian noise whose SPREAD depends on the row's vessel: sigma_v[v_idx] is an
-    # array of per-row standard deviations, so noisier vessels get wider scatter.
+    # Noise spread depends on the row's vessel, so noisier vessels get wider scatter.
     log_y = mu + rng.normal(0.0, sigma_v[v_idx])
 
-    # Table the model consumes; service_time_hours = exp(log_y) keeps the two scales consistent.
     df = pd.DataFrame({
         "vessel_idx": v_idx, "berth_idx": b_idx, "service_idx": s_idx,
         "log_service_time": log_y, "service_time_hours": np.exp(log_y),
     })
-    # Encoding maps each category string to an int index via dict comprehensions
-    # (f"V{i}" is an f-string: i=0 -> "V0", i=1 -> "V1", ...).
     enc = Encoding(
         vessel={f"V{i}": i for i in range(N_VESSEL)},
         berth={f"B{i}": i for i in range(N_BERTH)},
@@ -72,18 +61,15 @@ def _generate_synthetic() -> tuple[pd.DataFrame, Encoding]:
     return df, enc
 
 
-# pytest runs any test_* function automatically.
 def test_m3_recovers_per_vessel_dispersion():
     """The posterior ranks vessel sigmas in the correct order with high probability."""
     df, enc = _generate_synthetic()
-    # Build M3 with priors centered on the truth; eta_sd sets how much per-vessel
-    # log-sigmas may differ from the global sigma (here 0.5, a fairly loose prior).
+    # eta_sd=0.5 is a fairly loose prior on per-vessel log-sigma drift.
     model = build_model(
         df, enc,
         alpha0_mean=TRUE_ALPHA0, alpha0_sd=1.0,
         tau_halfnormal_sd=1.0, sigma_halfnormal_sd=1.0, eta_sd=0.5,
     )
-    # Enter the model context and run MCMC (NUTS); see test_bhm_heavytail for arg meanings.
     with model:
         idata = pm.sample(
             draws=1000, tune=1000, chains=2, target_accept=0.95,
@@ -94,20 +80,15 @@ def test_m3_recovers_per_vessel_dispersion():
     n_div = int(idata.sample_stats["diverging"].sum().item())
     assert n_div == 0, f"NUTS produced {n_div} divergences"
 
-    # Posterior mean per-vessel sigma should be monotonically increasing.
-    # .mean(dim=("chain","draw")) averages over all posterior samples, leaving one
-    # number per vessel. The model's sigma_vessel has N_VESSEL+1 entries (the last is
-    # the OOV/global fallback slot), so [:N_VESSEL] drops that extra slot and keeps
-    # only the real per-vessel values, aligned with `truth` below.
+    # sigma_vessel has N_VESSEL+1 entries (the last is the OOV/global fallback
+    # slot), so [:N_VESSEL] drops it to align with `truth` below.
     sigma_v_post = idata.posterior["sigma_vessel"].mean(dim=("chain", "draw")).values[:N_VESSEL]
-    # Allow small permutations: assert correlation with truth.
+    # Allow small permutations: assert correlation with truth (~1.0 = correct ranking).
     truth = TRUE_SIGMA_GLOBAL * TRUE_SIGMA_MULT
-    # np.corrcoef returns a 2x2 correlation matrix; [0, 1] is the cross-correlation
-    # between recovered and true sigmas. ~1.0 means the model ranked vessels correctly.
     corr = float(np.corrcoef(sigma_v_post, truth)[0, 1])
     assert corr > 0.8, f"Recovered sigma_vessel correlation with truth = {corr:.3f}"
 
-    # Global sigma_global should be near the truth: within +/- ~40-60% (loose band
-    # because the multiplicative per-vessel shocks make the global level less identifiable).
+    # Loose band because the multiplicative per-vessel shocks make the global
+    # level less identifiable.
     sg_mean = float(idata.posterior["sigma_global"].mean())
     assert 0.6 * TRUE_SIGMA_GLOBAL < sg_mean < 1.6 * TRUE_SIGMA_GLOBAL

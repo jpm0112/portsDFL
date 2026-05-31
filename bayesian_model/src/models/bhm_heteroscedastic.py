@@ -17,23 +17,16 @@ parameterization makes per-vessel sigmas multiplicative shocks around the
 global sigma, with eta_sd controlling how much they can differ.
 """
 
-# `from __future__ import annotations` makes type hints (e.g. `X | None`) be
-# treated as text so they work on older Python. Must be the first import.
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pymc as pm  # PyMC: the Bayesian modelling / MCMC library
+import pymc as pm
 
-# `..data_prep` = up one package level. OOV_INDEX (-1) marks unseen categories;
-# Encoding holds the string->int lookup tables.
 from ..data_prep import OOV_INDEX, Encoding
-# Reuse the baseline's helper that routes OOV (-1) codes to the zero slot.
 from .bhm_baseline import _remap_with_oov
 
 
-# `def f(...) -> pm.Model:` defines a function returning a built PyMC model.
-# Each `name: type = default` argument is optional (callers may omit it).
 def build_model(
     train_df: pd.DataFrame,
     encoding: Encoding,
@@ -43,8 +36,6 @@ def build_model(
     tau_halfnormal_sd: float = 0.5,
     sigma_halfnormal_sd: float = 0.7,
     eta_sd: float = 0.4,
-    # `**_unused` swallows any extra keyword args so all models share one
-    # uniform call signature.
     **_unused,
 ) -> pm.Model:
     """
@@ -56,76 +47,63 @@ def build_model(
 
     Output: pm.Model.
     """
-    # `coords` names each model dimension and lists its category labels so
-    # PyMC/ArviZ can tag outputs by name. `.keys()` -> the strings; `list(...)`
-    # makes a plain list.
     coords = {
         "vessel": list(encoding.vessel.keys()),
         "berth": list(encoding.berth.keys()),
         "service": list(encoding.service.keys()),
     }
 
-    # Integer codes per factor as NumPy arrays, with OOV (-1) routed to the
-    # appended zero slot at position n_levels.
     v_idx = _remap_with_oov(train_df["vessel_idx"].to_numpy(), encoding.n_vessel)
     b_idx = _remap_with_oov(train_df["berth_idx"].to_numpy(), encoding.n_berth)
     s_idx = _remap_with_oov(train_df["service_idx"].to_numpy(), encoding.n_service)
-    log_y = train_df["log_service_time"].to_numpy()  # observed targets, log(svc)
+    log_y = train_df["log_service_time"].to_numpy()
 
-    # Context manager: random variables defined in this block are registered on
-    # `model`. pm.MutableData wraps inputs so they can be swapped at predict time.
     with pm.Model(coords=coords) as model:
+        # Mutable inputs so the same compiled model can be reused at predict time.
         vessel_idx_data = pm.MutableData("vessel_idx", v_idx)
         berth_idx_data = pm.MutableData("berth_idx", b_idx)
         service_idx_data = pm.MutableData("service_idx", s_idx)
         log_y_data = pm.MutableData("log_y", log_y)
 
-        # Priors: global intercept (Normal) and group scales (HalfNormal >= 0).
+        # Global intercept on the log scale.
         alpha0 = pm.Normal("alpha0", mu=alpha0_mean, sigma=alpha0_sd)
         tau_vessel = pm.HalfNormal("tau_vessel", sigma=tau_halfnormal_sd)
         tau_berth = pm.HalfNormal("tau_berth", sigma=tau_halfnormal_sd)
         tau_service = pm.HalfNormal("tau_service", sigma=tau_halfnormal_sd)
 
-        # Non-centered offsets: standard normals (one per category) scaled by tau.
+        # Non-centered offsets (see bhm_baseline for the funnel rationale).
         z_vessel = pm.Normal("z_vessel", mu=0.0, sigma=1.0, dims="vessel")
         z_berth = pm.Normal("z_berth", mu=0.0, sigma=1.0, dims="berth")
         z_service = pm.Normal("z_service", mu=0.0, sigma=1.0, dims="service")
 
-        # pm.Deterministic saves a derived quantity in the trace. Group offsets
-        # = tau * z, with a trailing 0.0 as the OOV slot (zero offset).
+        # Trailing 0.0 is the OOV slot (zero offset).
         alpha_vessel = pm.Deterministic("alpha_vessel", pm.math.concatenate([tau_vessel * z_vessel, [0.0]]))
         alpha_berth = pm.Deterministic("alpha_berth", pm.math.concatenate([tau_berth * z_berth, [0.0]]))
         alpha_service = pm.Deterministic("alpha_service", pm.math.concatenate([tau_service * z_service, [0.0]]))
 
-        # Vessel-specific log-sigma shocks. The OOV slot uses zero shock
-        # (i.e., the global sigma) since we have no information.
-        sigma_global = pm.HalfNormal("sigma_global", sigma=sigma_halfnormal_sd)  # baseline noise scale
+        sigma_global = pm.HalfNormal("sigma_global", sigma=sigma_halfnormal_sd)
         # One log-shock per vessel type; eta_sd controls how far per-vessel
         # sigmas may drift from sigma_global.
         eta_v = pm.Normal("eta_v", mu=0.0, sigma=eta_sd, dims="vessel")
-        # Multiplicative shock: exp(eta) > 0, so sigma_global * exp(eta) keeps
-        # each per-vessel sigma positive (this is the heteroscedastic part).
+        # Multiplicative shock keeps each per-vessel sigma positive (the
+        # heteroscedastic part).
         sigma_vessel_core = sigma_global * pm.math.exp(eta_v)
-        # Append sigma_global at the OOV slot (index n_vessel) so unseen vessels
-        # fall back to the global noise scale.
+        # Append sigma_global at the OOV slot so unseen vessels fall back to the
+        # global noise scale.
         sigma_vessel = pm.Deterministic(
             "sigma_vessel", pm.math.concatenate([sigma_vessel_core, [sigma_global]])
         )
 
-        # Linear predictor (location mu): indexing each offset array by the
-        # row's integer code selects that row's group effect.
         mu = (
             alpha0
             + alpha_vessel[vessel_idx_data]
             + alpha_berth[berth_idx_data]
             + alpha_service[service_idx_data]
         )
-        # Likelihood: `observed=` binds this Normal to the data. Unlike M0, the
-        # noise sigma varies per row via sigma_vessel indexed by vessel code --
-        # the non-constant variance (heteroscedasticity) this model adds.
+        # Unlike M0, noise sigma varies per row via sigma_vessel indexed by
+        # vessel code -- the heteroscedasticity this model adds.
         pm.Normal(
             "log_y_obs", mu=mu, sigma=sigma_vessel[vessel_idx_data], observed=log_y_data
         )
 
-    # Return the built model; MCMC sampling (pm.sample) happens in fit.py.
     return model

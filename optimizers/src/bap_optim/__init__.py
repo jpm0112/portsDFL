@@ -10,31 +10,15 @@ the weekly-instance builder (numpy/pandas only) — import without the solver
 stack, so instance building and its tests run in environments that lack PyEPO.
 """
 
-# `from __future__ import annotations` makes every type hint in this file be
-# stored as plain text instead of being evaluated when the file loads. That is
-# what lets us write hints like `dict[str, str]` and reference classes that are
-# only imported lazily, without forcing those heavy imports to run at import time.
 from __future__ import annotations
 
-# `importlib` is the standard-library module that lets us import another module
-# *by its name as a string* at runtime (see `import_module` below). We need that
-# because we decide which submodule to load only when an attribute is requested.
 import importlib
 
-# `TYPE_CHECKING` is a special flag that is False at runtime but True when a type
-# checker (mypy / your IDE) analyses the code. We use it at the bottom of the file
-# to give static tools real imports without running them during normal execution.
 from typing import TYPE_CHECKING
 
-# Dependency-light: safe to import eagerly (numpy only).
-# This is a normal, immediate import — `BAPInstance` is always available the
-# moment this package is imported, because it does not drag in the solver stack.
+# Dependency-light: safe to import eagerly (numpy only, no solver stack).
 from bap_optim.instance import BAPInstance
 
-# A dictionary mapping each public name -> the submodule (filename without .py)
-# that defines it. `dict[str, str]` is a type hint saying "keys are strings,
-# values are strings". Nothing is imported here yet; this is just a lookup table
-# that `__getattr__` (below) consults the first time someone accesses a name.
 # name -> submodule providing it (imported on first access via __getattr__).
 _LAZY: dict[str, str] = {
     # Solver-dependent (PyEPO/Pyomo) — discrete_bap.
@@ -58,58 +42,29 @@ _LAZY: dict[str, str] = {
     "berth_index": "schedule",
 }
 
-# `__all__` is the official list of public names for this package: it controls
-# what `from bap_optim import *` exports, and tools use it as the public API.
-# `"BAPInstance"` is listed explicitly (it is imported eagerly above), then the
-# `*sorted(_LAZY)` part unpacks the alphabetically sorted dictionary keys into
-# this list. (`*` here means "spread the items of this iterable into the list";
-# iterating a dict yields its keys, so this adds every lazy name.)
 __all__ = ["BAPInstance", *sorted(_LAZY)]
 
 
-# PEP 562 lets a *module* define `__getattr__`, which Python calls automatically
-# whenever someone accesses a module attribute that does not already exist.
-# `def name(args) -> return_type:` defines a function; `name: str` is a parameter
-# type hint (the requested attribute name, a string). This is the heart of the
-# lazy-import trick: the heavy submodule is only loaded when its name is first used.
 def __getattr__(name: str):  # PEP 562 lazy attribute loading
-    # Look up which submodule owns this name. `.get(name)` returns None if the
-    # name is not in the map (instead of raising), so we can handle it gracefully.
     submodule = _LAZY.get(name)
     if submodule is None:
-        # Not one of our lazy names -> behave like a normal missing attribute.
-        # `f"..."` is an f-string (text with embedded `{...}` expressions); `!r`
-        # inserts the repr() form (quoted), e.g. produces "module 'x' has ...".
-        # `__name__` is this module's dotted import path (e.g. "bap_optim").
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    # Import the owning submodule *now*, by building its full dotted path as a
-    # string (e.g. "bap_optim.discrete_bap"). This is where PyEPO/Pyomo get
-    # pulled in, but only if a solver-dependent name was actually requested.
+    # Import the owning submodule now — this is where PyEPO/Pyomo get pulled in,
+    # but only if a solver-dependent name was actually requested.
     mod = importlib.import_module(f"{__name__}.{submodule}")
-    # Pull the requested object (class/function) out of the freshly imported module.
     value = getattr(mod, name)
-    # `globals()` is this module's namespace dict; storing the value there means
-    # the attribute now "exists", so future accesses find it directly and never
-    # re-enter __getattr__ (which is why the import work happens at most once).
     globals()[name] = value  # cache so subsequent lookups skip __getattr__
     return value
 
 
-# PEP 562 also lets a module define `__dir__`, which controls what `dir(module)`
-# shows (and tab-completion in many tools). Without this, lazily-loaded names
-# would not appear until after they were first accessed, so we report them all.
-# `-> list[str]` is a return-type hint meaning "returns a list of strings".
 def __dir__() -> list[str]:
     return sorted(__all__)
 
 
-# This block runs ONLY during static type checking (`TYPE_CHECKING` is False at
-# runtime), so these imports never execute when the program actually runs — they
-# don't trigger the heavy solver imports. Their purpose is purely to tell type
-# checkers and IDEs where each lazy name really comes from, enabling autocomplete
-# and type inference. `# noqa: F401` silences the linter's "imported but unused"
-# warning, since the names are intentionally imported only for the type checker.
-if TYPE_CHECKING:  # static-analysis hints only; not executed at runtime
+# TYPE_CHECKING is False at runtime, so these imports never trigger the heavy
+# solver imports; they exist only to tell type checkers/IDEs where each lazy
+# name comes from. noqa: F401 silences "imported but unused".
+if TYPE_CHECKING:
     from bap_optim.berths import (  # noqa: F401
         DEFAULT_BERTHS,
         VESSEL_TYPE_GROUPS,

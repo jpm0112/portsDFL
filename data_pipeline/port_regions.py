@@ -5,9 +5,6 @@ Maps 132 origin ports and 110 destination ports to geographic regions.
 Used by build_training_dataset.py to create origin_region and dest_region features.
 """
 
-# A dict (dictionary) is a lookup table of key -> value pairs written as {key: value, ...}.
-# Here every key is a port name (str) and every value is the region (str) it belongs to.
-# This module-level constant is written in ALL_CAPS by convention to signal "do not change me".
 PORT_TO_REGION = {
     # --- Chilean North ---
     "ARICA": "Chilean_North",
@@ -207,7 +204,6 @@ PORT_TO_REGION = {
 }
 
 
-# `def name(args):` defines a function. `port_name` is the single input (parameter).
 def get_region(port_name):
     """
     Returns the geographic region for a port name.
@@ -216,12 +212,7 @@ def get_region(port_name):
     Input: port_name (str)
     Output: region string
     """
-    # Guard against missing/blank input. `not port_name` is True for None, "" (empty
-    # string), or 0/NaN-like falsy values. `str(...)` forces it to text so .strip()
-    # works even if a non-string (e.g. a pandas NaN float) is passed in.
-    # .strip() removes leading/trailing whitespace like " ARICA " -> "ARICA".
+    # Guard against missing/blank input (None, "", or a pandas NaN float).
     if not port_name or str(port_name).strip() == "":
         return "Other"
-    # dict.get(key, default) looks up the key; if it is NOT in the dict it returns the
-    # default ("Other") instead of raising a KeyError. This is the "Other" fallback.
     return PORT_TO_REGION.get(str(port_name).strip(), "Other")

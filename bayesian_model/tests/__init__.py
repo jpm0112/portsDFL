@@ -1,3 +1,2 @@
-# This file is intentionally empty. Its mere presence marks the `tests/` folder
-# as a Python "package", which lets test files import shared helpers from each
-# other and lets test runners (like pytest) discover the tests cleanly.
+# Marks the `tests/` folder as a package so test files can share helpers and
+# pytest can discover them.
