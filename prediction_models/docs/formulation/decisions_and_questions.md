@@ -104,6 +104,29 @@ still teaching the model to respect windows. This is the central PtO/DFL-driven 
 **PtO/DFL implication:** big-M and the horizon affect numerical conditioning of every solve in
 the DFL loop; the one-week scope fixes the instance size `N` the predictor and optimizer see.
 
+## Q9. Shared navigation channel — **DECIDED (optional, off by default)**
+
+The Port of San Antonio has a **single** navigation channel: every vessel transits it once to
+enter (before berthing) and once to exit (after service), and no two transits — of any vessels,
+either direction — may overlap. Modeling choices, all confirmed with the user:
+
+- **Both directions, one parameter:** each vessel uses the channel for entry *and* exit, and a
+  single `channel_time` `c` covers both transits.
+- **Objective becomes weighted departure:** when the channel is on, minimize `Σ wᵢ·(eoutᵢ + c)`
+  (the vessel only leaves once its outbound transit clears the channel), replacing the
+  berth-completion objective `Σ wᵢ·(sᵢ + τᵢ)`.
+- **No-wait window moves to entry:** for a priority service, "no waiting" now means *entering the
+  channel on arrival* (`einᵣ ≤ lᵣ`), since the transit time `c` is unavoidable; the window is no
+  longer placed on the berth start `sᵣ`.
+- **big-M bump:** the channel can serialize all `2N` transits, so the precedence/disjunction
+  big-M is raised by `2·N·c`.
+
+**PtO/DFL implication:** the channel is **optional and defaults off** for the synthetic
+generators and the DFL trainer, so the PyEPO contract (cost ↔ decision of length `N`) is
+unchanged and the deterministic weekly planner is its only consumer. The regret re-derivation
+(`derive_starts_under_true_tau`) does **not** yet model the channel — extending it (so
+channel-aware regret is well-defined) is a documented follow-up, not in scope here.
+
 ---
 
 ## How to use this file

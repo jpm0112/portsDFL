@@ -33,7 +33,10 @@ at the Port of San Antonio as a discrete, dynamic Berth Allocation Problem
 (BAP). The model assigns each vessel to a compatible berth and a start time,
 minimizing total weighted completion time. A subset of \emph{service} vessels
 (the port's term for committed/priority calls) carry a \emph{hard} no-wait
-window: they must be berthed essentially on arrival. The service time
+window: they must be berthed essentially on arrival. An optional shared
+\emph{navigation channel}---a single waterway every vessel transits to enter and
+to exit, with no two transits overlapping---can be switched on, in which case the
+model minimizes weighted \emph{departure}. The service time
 $\tau$ that drives the schedule is predicted by an upstream model and the
 predictor is trained \emph{decision-focused}, differentiating end-to-end
 through the MILP, with a predict-then-optimize baseline as the natural
@@ -76,12 +79,16 @@ $a_i\ge 0$ & arrival time of vessel $i$ (hours from week start) \\
 $w_i\ge 0$ & priority weight of vessel $i$ \\
 $\tau_i>0$ & service (berth-occupation) time; \emph{predicted} as $\hat\tau_i$ \\
 $l_r$ & latest start for service $r\in\R$; $l_r=a_r+\text{slack}$ \\
-$\bigM$ & big-$M$ constant ($\ge$ horizon $+$ max berth workload) \\
+$c\ge 0$ & navigation-channel transit time (enter or exit); \emph{optional} \\
+$\bigM$ & big-$M$ constant ($\ge$ horizon $+$ max berth workload; $+2Nc$ with channel) \\
 \midrule
 $x_{ib}\in\{0,1\}$ & $1$ if vessel $i$ uses berth $b$ \quad(only for $b\in\Bi$) \\
 $s_i\ge a_i$ & start time of vessel $i$ \\
 $z_{ijb}\in\{0,1\}$ & $1$ if $i$ precedes $j$ at berth $b$ \\
 $\delta_r\ge 0$ & (soft mode) tardiness of service $r$ past its window \\
+$e^{\mathrm{in}}_i\ge a_i$ & (channel) inbound-transit start of vessel $i$ \\
+$e^{\mathrm{out}}_i\ge 0$ & (channel) outbound-transit start of vessel $i$ \\
+$y_{ef}\in\{0,1\}$ & (channel) $1$ if transit event $e$ precedes event $f$ \\
 \bottomrule
 \end{tabular}
 \caption{Notation.}
@@ -112,7 +119,10 @@ service window (see \S\ref{sec:windows}). \eqref{eq:one}--\eqref{eq:order} force
 an ordering between any two vessels sharing a berth, and \eqref{eq:prec} is the
 big-$M$ precedence that prevents overlap. Precedence triples and $z$ variables
 are built only for pairs that can share a berth ($b\in\Bi\cap\B_j$), which keeps
-the model compact under tight compatibility.
+the model compact under tight compatibility. When the optional navigation
+channel is modeled (\S\ref{sec:channel}), objective \eqref{eq:obj} is replaced by
+weighted \emph{departure} $\sum_{i\in\I} w_i\,(e^{\mathrm{out}}_i + c)$, since the
+vessel only clears the port after its outbound transit completes.
 
 \section{Hard vs.\ soft service windows}\label{sec:windows}
 \textbf{Hard mode} (deterministic weekly planner) imposes \eqref{eq:window}:
@@ -127,6 +137,52 @@ the tardiness variable and penalty $\eqref{eq:soft}$, $+\,p\sum_r\delta_r$ in
 $\hat\tau$---essential because the DFL trainer re-solves the MILP for arbitrary
 (early-training, possibly poor) predictions, and an infeasible solve would abort
 training and undefine the regret.
+
+\section{Shared navigation channel}\label{sec:channel}
+The Port of San Antonio has a \emph{single} navigation channel: every vessel
+transits it once to \textbf{enter} (before berthing) and once to \textbf{exit}
+(after service), and no two transits---of any vessels, in either
+direction---may occupy it simultaneously. This is an optional extension: with
+$c=\text{None}$ the model reduces exactly to the berth-only formulation above.
+
+Each vessel gets an inbound-transit start $e^{\mathrm{in}}_i\ge a_i$ and an
+outbound-transit start $e^{\mathrm{out}}_i$; transit $k\in\{\mathrm{in},
+\mathrm{out}\}$ occupies the channel over $[t^k_i,\,t^k_i+c]$ with
+$t^{\mathrm{in}}_i=e^{\mathrm{in}}_i$ and $t^{\mathrm{out}}_i=e^{\mathrm{out}}_i$.
+Let $\mathcal{E}=\{(i,\mathrm{in}),(i,\mathrm{out}):i\in\I\}$ be the $2N$ transit
+events. The channel adds:
+\begin{align}
+& s_i \ge e^{\mathrm{in}}_i + c && \forall i\in\I \label{eq:chin}\\
+& e^{\mathrm{out}}_i \ge s_i + \tau_i && \forall i\in\I \label{eq:chout}\\
+& t_f \ge t_e + c - \bigM\,(1-y_{ef}) && \forall\, e,f\in\mathcal{E},\ e<f,\ v(e)\ne v(f) \label{eq:chfwd}\\
+& t_e \ge t_f + c - \bigM\,y_{ef} && \forall\, e,f\in\mathcal{E},\ e<f,\ v(e)\ne v(f) \label{eq:chbwd}
+\end{align}
+\eqref{eq:chin} mooring may begin only after the inbound transit finishes;
+\eqref{eq:chout} the outbound transit may begin only after service completes.
+\eqref{eq:chfwd}--\eqref{eq:chbwd} are the channel mutual-exclusion disjunction:
+for every pair of transit events belonging to \emph{different} vessels ($v(e)$ is
+$e$'s vessel), one transit must finish before the other starts. The same-vessel
+pair $(i,\mathrm{in}),(i,\mathrm{out})$ is omitted---it is already ordered by
+\eqref{eq:chin}--\eqref{eq:chout}---giving $\binom{2N}{2}-N$ order binaries
+$y_{ef}$. The disjunction big-$M$ uses $\bigM+2Nc$, large enough for the channel
+to serialize all $2N$ transits.
+
+\textbf{Objective.} With the channel, the model minimizes weighted
+\emph{departure} $\sum_{i\in\I} w_i\,(e^{\mathrm{out}}_i + c)$: the vessel leaves
+the port only when its outbound transit clears the channel.
+
+\textbf{No-wait window on entry.} When the channel is modeled, the hard/soft
+service window \eqref{eq:window}/\eqref{eq:soft} is imposed on the
+\emph{entry} time ($e^{\mathrm{in}}_r\le l_r$ hard, $\delta_r\ge
+e^{\mathrm{in}}_r-l_r$ soft) rather than on $s_r$: ``no waiting'' for a priority
+service means it enters the channel on arrival, the mandatory transit time $c$
+notwithstanding.
+
+\textbf{DFL scope.} The channel defaults off for the synthetic generators and
+the DFL trainer, so the PyEPO contract (cost$\leftrightarrow$decision of length
+$N$) is unchanged; the deterministic weekly planner is its consumer. Extending
+the regret re-derivation to model the channel is a documented follow-up, not in
+scope here.
 
 \section{Single-week solve scope}
 The MILP solves exactly one 7-day instance ($N$ fixed, horizon $168$\,h).
@@ -150,9 +206,10 @@ $\ge 0$ by construction.
 
 \section{Implementation pointers}
 The MILP lives in \texttt{optimizers/src/bap\_optim/discrete\_bap.py}
-(\texttt{DiscreteBAP}, with the \texttt{hard\_windows} flag). The instance
+(\texttt{DiscreteBAP}, with the \texttt{hard\_windows} flag; \texttt{extract\_channel}
+reads back $e^{\mathrm{in}}/e^{\mathrm{out}}$). The instance
 descriptor \texttt{BAPInstance} (with optional \texttt{latest\_start},
-\texttt{berth\_compat}, \texttt{service}) is in \texttt{bap\_optim/instance.py}; the
+\texttt{berth\_compat}, \texttt{service}, \texttt{channel\_time}) is in \texttt{bap\_optim/instance.py}; the
 berth catalog and compatibility in \texttt{bap\_optim/berths.py}; the pre-solve
 weekly slicing in \texttt{bap\_optim/weekly\_instance.py}; and the deterministic
 planner in \texttt{prediction\_models/scripts/plan\_week.py}. Open modeling decisions

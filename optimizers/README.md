@@ -32,8 +32,16 @@ to `sys.path`, so they run without an install).
 ## Key entry points
 - `from bap_optim import DiscreteBAP, BAPInstance` — the MILP.
 - `from bap_optim import build_weekly_instance, generate_synthetic_weekly_instance` — instances.
-- `from bap_optim import assemble_schedule, compute_kpis` — post-solve reporting.
+- `from bap_optim import assemble_schedule, compute_kpis, extract_channel` — post-solve reporting.
 
 Dependency-light pieces (`BAPInstance`, berths, weekly builder, schedule) import without PyEPO;
 only `DiscreteBAP` pulls in the solver stack. The formulation is documented in
 `prediction_models/docs/formulation/`.
+
+## Shared navigation channel (optional)
+Pass `channel_time=c` to either weekly builder (or `--channel-time c` to `plan_week.py`) to model
+the port's single navigation channel: every vessel transits it to **enter** (before berthing) and
+**exit** (after service), no two transits overlap, and the objective becomes weighted **departure**
+`Σ wᵢ·(eoutᵢ + c)`. The no-wait service window then applies to channel entry. `extract_channel`
+reads back the per-vessel entry/exit transit times. The channel defaults **off** (`None`), so the
+DFL/PyEPO path is unchanged — it is consumed by the deterministic planner. See decisions log Q9.
