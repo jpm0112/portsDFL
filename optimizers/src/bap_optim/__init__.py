@@ -26,6 +26,7 @@ _LAZY: dict[str, str] = {
     "generate_bap_instance": "discrete_bap",
     "derive_starts_under_true_tau": "discrete_bap",
     "extract_decision": "discrete_bap",
+    "extract_channel": "discrete_bap",
     "schedule_cost_under_true_tau": "discrete_bap",
     # Dependency-light (numpy / pandas) — berths + weekly builder.
     "Berth": "berths",
@@ -76,6 +77,7 @@ if TYPE_CHECKING:
     from bap_optim.discrete_bap import (  # noqa: F401
         DiscreteBAP,
         derive_starts_under_true_tau,
+        extract_channel,
         extract_decision,
         generate_bap_instance,
         schedule_cost_under_true_tau,

@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 # The optimizers (bap_optim) now live in the sibling top-level package optimizers/src.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "optimizers" / "src"))
 
-from bap_optim.discrete_bap import DiscreteBAP, extract_decision
+from bap_optim.discrete_bap import DiscreteBAP, extract_channel, extract_decision
 from bap_optim.schedule import assemble_schedule, compute_kpis
 from bap_optim.weekly_instance import (
     build_weekly_instance,
@@ -60,6 +60,10 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--soft", action="store_true",
                    help="Use soft (penalised) windows instead of hard ones (keeps over-booked weeks feasible).")
     p.add_argument("--penalty-weight", type=float, default=1000.0, help="Soft-window tardiness penalty.")
+    p.add_argument("--channel-time", type=float, default=None,
+                   help="Model a single shared navigation channel: hours each vessel needs to enter "
+                        "and to exit. No two transits overlap; objective becomes weighted departure. "
+                        "Omit for the berth-only model.")
 
     # Synthetic-only knobs.
     p.add_argument("--n-vessels", type=int, default=18)
@@ -82,6 +86,7 @@ def _build_bundle(args):
             service_slack_hours=args.slack_hours,
             base_weight=args.base_weight,
             service_weight=args.service_weight,
+            channel_time=args.channel_time,
         )
     if not args.week_start:
         raise SystemExit("--week-start is required with --source.")
@@ -96,22 +101,32 @@ def _build_bundle(args):
         service_slack_hours=args.slack_hours,
         base_weight=args.base_weight,
         service_weight=args.service_weight,
+        channel_time=args.channel_time,
     )
 
 
 def _print_schedule(rows: list[dict]) -> None:
-    hdr = f"{'id':>10}  {'type':<15} {'berth':<10} {'arr':>7} {'start':>7} {'wait':>6} {'τ':>6} {'finish':>7} {'svc':>3} {'win':>3}"
+    # The channel columns (enter/exit/depart) only exist when a channel was modelled.
+    has_channel = bool(rows) and "departure_h" in rows[0]
+    hdr = f"{'id':>10}  {'type':<15} {'berth':<10} {'arr':>7} {'start':>7} {'wait':>6} {'τ':>6} {'finish':>7}"
+    if has_channel:
+        hdr += f" {'enter':>7} {'exit':>7} {'depart':>7}"
+    hdr += f" {'svc':>3} {'win':>3}"
     print(hdr)
     print("-" * len(hdr))
     for r in rows:
         svc = "Y" if r["is_service"] else ""
         # Only services have a window.
         win = "" if not r["is_service"] else ("ok" if r["window_ok"] else "VIOL")
-        print(
+        line = (
             f"{str(r['vessel_id']):>10}  {r['vessel_type']:<15.15} {r['berth']:<10.10} "
             f"{r['arrival_h']:>7.1f} {r['start_h']:>7.1f} {r['wait_h']:>6.1f} "
-            f"{r['tau_h']:>6.1f} {r['finish_h']:>7.1f} {svc:>3} {win:>3}"
+            f"{r['tau_h']:>6.1f} {r['finish_h']:>7.1f}"
         )
+        if has_channel:
+            line += f" {r['enter_h']:>7.1f} {r['exit_h']:>7.1f} {r['departure_h']:>7.1f}"
+        line += f" {svc:>3} {win:>3}"
+        print(line)
 
 
 def _print_kpis(kpis: dict) -> None:
@@ -125,6 +140,12 @@ def _print_kpis(kpis: dict) -> None:
     print(f"  mean berth utilization      : {kpis['mean_berth_utilization']:.2%}")
     for name, u in kpis["berth_utilization"].items():
         print(f"      {name:<12}: {u:.2%}")
+    ch = kpis.get("channel")
+    if ch is not None:
+        print(f"  channel transit (h)         : {ch['transit_time_h']:.1f}  ({ch['n_transits']} transits)")
+        print(f"  channel utilization         : {ch['utilization']:.2%}")
+        print(f"  port makespan (last depart) : {ch['port_makespan_h']:.1f}")
+        print(f"  channel no-overlap          : {ch['no_overlap']}  (overlaps={ch['overlaps']})")
 
 
 def _report_infeasible(bundle) -> None:
@@ -222,10 +243,15 @@ def main() -> None:
         raise SystemExit(1)
 
     assignment, _order = extract_decision(model)
-    rows = assemble_schedule(bundle, starts, assignment)
-    kpis = compute_kpis(bundle, starts, assignment, horizon_h=args.week_days * 24.0)
+    # ein/eout are None unless a channel was modelled (extract_channel guards that).
+    ein, eout = extract_channel(model)
+    rows = assemble_schedule(bundle, starts, assignment, ein=ein, eout=eout)
+    kpis = compute_kpis(bundle, starts, assignment,
+                        horizon_h=args.week_days * 24.0, ein=ein, eout=eout)
 
-    print(f"\nSolved. objective (weighted completion time{' + penalty' if args.soft else ''}) = {obj:.1f}\n")
+    objective_name = ("weighted departure" if bundle.channel_time is not None
+                      else "weighted completion time")
+    print(f"\nSolved. objective ({objective_name}{' + penalty' if args.soft else ''}) = {obj:.1f}\n")
     _print_schedule(rows)
     _print_kpis(kpis)
 
@@ -240,6 +266,13 @@ def main() -> None:
     if not args.soft and not kpis["all_services_no_wait"]:
         print("\nWARNING: a service vessel waited despite hard windows — investigate.")
         raise SystemExit(2)  # exit code 2 distinguishes this from the solver-error exit 1
+
+    # Non-zero exit if two channel transits overlap (should never happen — the
+    # MILP forbids it; this catches a modelling/extraction regression).
+    ch = kpis.get("channel")
+    if ch is not None and not ch["no_overlap"]:
+        print(f"\nWARNING: {ch['overlaps']} channel-transit overlap(s) detected — investigate.")
+        raise SystemExit(3)  # exit code 3 distinguishes channel violations
 
 
 if __name__ == "__main__":

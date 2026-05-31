@@ -90,6 +90,7 @@ class WeeklyInstanceBundle:
     week_start: str
     week_end: str
     source: str                     # provenance string
+    channel_time: float | None = None  # shared-channel transit hours (None => no channel)
 
     @property
     def n_vessels(self) -> int:
@@ -163,6 +164,7 @@ def _build_bundle(
     week_end,
     source,
     big_m,
+    channel_time=None,
 ) -> WeeklyInstanceBundle:
     """Assemble a BAPInstance + bundle from already-computed per-vessel arrays."""
     # Normalise dtypes so both the real and synthetic paths feed the solver
@@ -182,6 +184,10 @@ def _build_bundle(
         # all service times stacked at one berth, +1. initial=0.0 handles empty.
         horizon = float(np.max(arrivals_h, initial=0.0))
         big_m = float(horizon + float(tau_h.sum()) + 1.0)
+        # A channel can serialise all 2N transits, pushing starts later, so the
+        # precedence big-M must grow to keep its disjunction valid.
+        if channel_time is not None:
+            big_m += 2.0 * n * float(channel_time)
 
     # Only pass window arrays when at least one service vessel exists.
     if bool(is_service.any()):
@@ -200,6 +206,7 @@ def _build_bundle(
         latest_start=latest_arr,
         berth_compat=compat,
         service=service_arr,
+        channel_time=channel_time,
     )
     return WeeklyInstanceBundle(
         instance=instance,
@@ -215,6 +222,7 @@ def _build_bundle(
         week_start=str(week_start),
         week_end=str(week_end),
         source=source,
+        channel_time=channel_time,
     )
 
 
@@ -242,6 +250,7 @@ def build_weekly_instance(
     berths: list[Berth] | None = None,
     min_compat_count: int = 1,
     big_m: float | None = None,
+    channel_time: float | None = None,
 ) -> WeeklyInstanceBundle:
     """Slice one 7-day window out of the call data and build a BAPInstance.
 
@@ -268,6 +277,10 @@ def build_weekly_instance(
             still get the right compatibility).
         min_compat_count: threshold passed to ``derive_berths_from_history``.
         big_m: precedence big-M; auto-sized when ``None``.
+        channel_time: shared navigation-channel transit hours. ``None`` ⇒ no
+            channel (berth-only model). When set, every vessel transits the
+            single channel to enter and exit, no two transits overlap, and the
+            objective minimises weighted departure.
 
     Returns:
         A :class:`WeeklyInstanceBundle`.
@@ -375,6 +388,7 @@ def build_weekly_instance(
         week_end=str((ws + pd.Timedelta(days=week_days)).date()),
         source=provenance,
         big_m=big_m,
+        channel_time=(None if channel_time is None else float(channel_time)),
     )
 
 
@@ -392,6 +406,7 @@ def generate_synthetic_weekly_instance(
     service_slack_hours: float = 0.0,
     base_weight: float = 1.0,
     service_weight: float = 3.0,
+    channel_time: float | None = None,
 ) -> WeeklyInstanceBundle:
     """Fabricate a realistic week (no data needed) for demos and tests.
 
@@ -455,4 +470,5 @@ def generate_synthetic_weekly_instance(
         week_end=f"synthetic-week-{week_days}d",
         source=f"synthetic(seed={seed},n={n_vessels})",
         big_m=None,
+        channel_time=(None if channel_time is None else float(channel_time)),
     )
