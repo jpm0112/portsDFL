@@ -64,8 +64,13 @@ class RealMLP(BaseModel):
             "verbosity": 0,
         }
         # Only pass non-None overrides so we keep RealMLP's tuned defaults.
-        if self.hidden_dim is not None:
-            kwargs["hidden_sizes"] = [self.hidden_dim] * (self.depth or 3)
+        # FIX: previously hidden_sizes was set only when hidden_dim was given, so
+        # passing `depth` alone (e.g. from a tuner) was silently ignored. Build it
+        # whenever EITHER is provided, defaulting the width to RealMLP's 256.
+        if self.hidden_dim is not None or self.depth is not None:
+            width = self.hidden_dim if self.hidden_dim is not None else 256
+            n_layers = self.depth if self.depth is not None else 3
+            kwargs["hidden_sizes"] = [width] * n_layers
         if self.dropout is not None:
             kwargs["p_drop"] = self.dropout  # pytabkit names its dropout arg "p_drop"
         if self.lr is not None:

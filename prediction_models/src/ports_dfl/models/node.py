@@ -58,17 +58,16 @@ class _NODERegressor(nn.Module):
     ) -> None:
         super().__init__()
         # DenseODSTBlock is the stack of differentiable oblivious decision trees.
-        # REVIEW NOTE: `tree_depth` is accepted by this constructor (and by
-        # NODE.__init__) but is NOT forwarded to DenseODSTBlock below, so the
-        # tree-depth hyperparameter is silently ignored and the block always
-        # uses its library default depth. To actually control depth, pass it
-        # through (the pytorch_tabular ODST API uses the keyword `depth=`),
-        # e.g. add `depth=tree_depth,` to this call. Left unchanged here
-        # because it alters the network architecture/behavior.
+        # FIX: forward tree_depth to the block (pytorch_tabular's ODST keyword is
+        # `depth`). It was accepted by __init__ but never passed here, so the
+        # tree-depth hyperparameter was silently ignored and any tuning sweep over
+        # it had no effect. NOTE: changes the network (old checkpoints won't match);
+        # confirm the kwarg name against the installed pytorch_tabular version.
         self.block = DenseODSTBlock(
             input_dim=input_dim,
             num_trees=n_trees,
             num_layers=n_layers,
+            depth=tree_depth,
             tree_output_dim=tree_output_dim,
             input_dropout=input_dropout,
             flatten_output=True,  # return one flat feature vector per row

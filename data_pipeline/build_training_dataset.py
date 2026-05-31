@@ -279,37 +279,49 @@ def build_historical_features(df):
     return df
 
 
+def _causal_group_mean(df, group_cols):
+    """Leak-free running mean of estadia_sitio_hours per group.
+
+    For each row, average over same-group visits whose outcome was ALREADY
+    OBSERVED when this vessel's berthing decision is made — i.e. visits whose
+    last_unmooring_datetime <= this row's first_mooring_datetime. A row's own
+    visit is never included (its unmooring is after its mooring).
+
+    This is the cross-vessel analogue of the per-vessel shift(1). FIX: a plain
+    expanding().shift(1) ordered by mooring START leaks here — it would include
+    other vessels that were still at berth (outcome not yet known) when this
+    vessel arrived. (The per-vessel features in build_historical_features are
+    NOT affected: one physical vessel cannot overlap its own prior visits, so
+    those are always complete.)
+    """
+    cols = group_cols if isinstance(group_cols, list) else [group_cols]
+    out = pd.Series(np.nan, index=df.index, dtype="float64")
+    for _, idx in df.groupby(cols, sort=False).groups.items():
+        sub = df.loc[idx]
+        comp = sub.sort_values("last_unmooring_datetime")
+        comp_t = comp["last_unmooring_datetime"].to_numpy()
+        run_mean = comp["estadia_sitio_hours"].to_numpy().cumsum() / np.arange(1, len(comp) + 1)
+        fm = sub["first_mooring_datetime"].to_numpy()
+        # k = number of same-group visits completed by this row's mooring start.
+        k = np.searchsorted(comp_t, fm, side="right")
+        out.loc[sub.index] = np.where(k > 0, run_mean[np.clip(k - 1, 0, len(run_mean) - 1)], np.nan)
+    return out
+
+
 def build_group_features(df):
     """
-    Build expanding-window group-level features for fallback predictions.
+    Build leak-free group-level features for fallback predictions.
 
-    Computes historical averages at (vessel_type_group, terminal), vessel_type_group,
-    and terminal levels. Shifted by 1 to avoid leakage.
+    Historical averages at (vessel_type_group, terminal), vessel_type_group, and
+    terminal levels, each using only visits that had COMPLETED before the current
+    vessel's berthing decision (see _causal_group_mean).
 
-    Input:  DataFrame sorted chronologically
+    Input:  DataFrame with first_mooring_datetime / last_unmooring_datetime
     Output: DataFrame with group-level feature columns
     """
-    # NOTE: relies on df still being in first_mooring_datetime order from
-    # build_historical_features() (not re-sorted here). Same shift(1) trick: each
-    # row's group average uses only EARLIER rows in that group, never itself.
-    # Type + terminal average
-    df["type_terminal_avg_stay"] = (
-        df.groupby(["vessel_type_group", "terminal"])["estadia_sitio_hours"]
-        .transform(lambda x: x.expanding().mean().shift(1))
-    )
-
-    # Type average
-    df["type_avg_stay"] = (
-        df.groupby("vessel_type_group")["estadia_sitio_hours"]
-        .transform(lambda x: x.expanding().mean().shift(1))
-    )
-
-    # Terminal average
-    df["terminal_avg_stay"] = (
-        df.groupby("terminal")["estadia_sitio_hours"]
-        .transform(lambda x: x.expanding().mean().shift(1))
-    )
-
+    df["type_terminal_avg_stay"] = _causal_group_mean(df, ["vessel_type_group", "terminal"])
+    df["type_avg_stay"] = _causal_group_mean(df, "vessel_type_group")
+    df["terminal_avg_stay"] = _causal_group_mean(df, "terminal")
     return df
 
 

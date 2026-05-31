@@ -19,13 +19,24 @@ empty-rows crash; `run_dfl_synthetic` DFL row label by method; `run_dfl_real_bap
 `benchmark_dbb` dead `import os`; `compare_models` leaked file handle; `report.py` hardcoded
 "661 vessel calls"; `figures.py` dead `rng` vars.
 
-**Top issues to look at (reported, not changed):**
-1. 🔴 **`build_training_dataset.py` historical-feature leakage** — windows ordered by mooring
-   *start* but target known at *unmooring*; an overlapping prior visit can leak. Highest priority.
-2. 🔴 **`classic_bap.py` big-M may be too small** for high-contention synthetic instances →
-   could distort schedules / the DFL regret signal.
-3. 🟡 **`node.py` `tree_depth` and `realmlp.py` `depth` are silently ignored** — tuning over them
-   does nothing.
+**Top issues — FIXED (2026-05-31):**
+1. ✅ 🔴 **`build_training_dataset.py` group-feature leakage** — FIXED. The cross-vessel group
+   averages (`type_terminal_avg_stay`, `type_avg_stay`, `terminal_avg_stay`) now use a
+   completion-aware `_causal_group_mean`: each row averages only same-group visits whose
+   `last_unmooring <= this row's first_mooring` (outcome already known at decision time). The
+   per-vessel features were left as-is — a single physical vessel can't overlap its own prior
+   visits, so they were never leaky. *Verified on a hand-built example (a naive expanding-shift
+   leaks row2→10.0; causal correctly → NaN). Re-run `build_training_dataset.py` on the real data
+   to regenerate `training_dataset.csv` and confirm counts.*
+2. ✅ 🔴 **`classic_bap.py` big-M** — FIXED to `arrivals.max() + n_vessels·tau_mean·exp(3·sigma)
+   + horizon` (a provably-safe upper bound on the worst single-berth pile-up). *Verified: a
+   high-contention solve now uses big_m≈386 (>> the ~99 pile-up) and produces a valid
+   non-overlapping schedule.*
+3. ✅ 🟡 **`node.py` `tree_depth` / `realmlp.py` `depth` ignored** — FIXED (forward `depth=` to
+   `DenseODSTBlock`; build `hidden_sizes` whenever `hidden_dim` OR `depth` is given). *Byte-compiles;
+   needs `pytorch_tabular`/`pytabkit` installed to runtime-verify (libs absent here).*
+
+**Still open (reported, not changed):**
 4. 🟡 **`data_prep.py` unguarded `np.log(target)`**, **`build_clean_dataset` `Sitio` float/NaN**
    normalization, and several empty-input crashes (`diagnostics` ppc, `build_report` boxplot
    `labels=` removed in matplotlib 3.11).

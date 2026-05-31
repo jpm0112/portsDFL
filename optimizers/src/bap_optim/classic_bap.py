@@ -183,8 +183,14 @@ def make_classic_problem(
     else:
         raise ValueError(f"Unknown arrival pattern: {arrival!r}")
 
-    # big-M large enough that s[j] >= s[i]+tau[i] - M*(1-z) is slack when z=0.
-    big_m = float(horizon + 4.0 * tau_mean + arrivals.max())
+    # big-M must exceed the worst-case s[i]+tau[i]-s[j] — the longest completion
+    # when all N vessels stack at one berth (arrivals.max() + sum of tau).
+    # FIX: the old `horizon + 4*tau_mean + arrivals.max()` could fall below that
+    # pile-up for high-contention instances, letting a too-small M spuriously
+    # force precedence even when z=0 (corrupting schedules / the DFL regret).
+    # Size M from a high per-vessel tau quantile (~exp(3*sigma)) times N. A larger
+    # M never cuts a feasible schedule; it only loosens the LP relaxation.
+    big_m = float(arrivals.max() + n_vessels * tau_mean * np.exp(3.0 * tau_sigma) + horizon)
     instance = BAPInstance(
         n_vessels=n_vessels,
         n_berths=n_berths,
