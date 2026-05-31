@@ -1,0 +1,14 @@
+# Global environment for the whole portsDFL repo:
+#
+#   pip install -r requirements.txt
+#
+# Each subproject's own requirements.txt is the source of truth; this file just
+# composes them via -r. (prediction_models/requirements.txt already pulls in
+# optimizers/requirements.txt, so the optimizer stack is included transitively.)
+#
+# To install just one part instead, use that subproject's file, e.g.:
+#   pip install -r optimizers/requirements.txt
+#   pip install -r bayesian_model/requirements.txt
+
+-r prediction_models/requirements.txt
+-r bayesian_model/requirements.txt

@@ -6,9 +6,12 @@
 #
 # Replace cu121 with cu118 / cu124 / cpu as appropriate.
 
-# Core scientific stack
-numpy>=1.26
-pandas>=2.2
+# Optimizer stack (MILP + DFL hooks): prediction_models imports the bap_optim
+# package, so it inherits the optimizers' requirements. This also brings in
+# numpy / pandas / pyomo / pyepo / gurobipy — no need to repeat them here.
+-r ../optimizers/requirements.txt
+
+# Core ML / scientific
 scikit-learn>=1.5
 
 # Deep learning
@@ -19,22 +22,13 @@ torchvision
 lightgbm>=4.3
 pytabkit>=1.4              # RealMLP
 
-# Decision-Focused Learning
-pyepo>=0.3                 # SPO+, blackbox, perturbed Fenchel-Young
-
 # Hyperparameter tuning
 optuna>=3.6
 
 # Categorical encoding
 category-encoders>=2.6
 
-# Optimization solver bindings (license at ~/gurobi.lic)
-gurobipy>=11.0
-
-# Algebraic modeling layer for solver-agnostic MILPs (DBAP)
-pyomo>=6.7
-
-# Plotting for the PDF report (build_report.py)
+# Plotting (build_report.py PDF + plan_week.py Gantt)
 matplotlib>=3.8
 
 # Tooling

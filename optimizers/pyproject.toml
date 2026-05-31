@@ -8,16 +8,18 @@ version = "0.1.0"
 description = "Discrete Berth Allocation Problem MILP + weekly planner (Pyomo/Gurobi, PyEPO-compatible) for portsDFL."
 requires-python = ">=3.10"
 dependencies = [
-    "numpy",
-    "pandas",
+    "numpy>=1.26",
+    "pandas>=2.2",
     "pyomo>=6.7",
 ]
 
 [project.optional-dependencies]
-# DFL training differentiates through the MILP via PyEPO; the deterministic
-# planner's Gantt chart needs matplotlib. Install as needed.
+# DFL training differentiates through the MILP via PyEPO; the solver backend is
+# Gurobi; the planner's Gantt chart needs matplotlib. Install as needed.
+# (optimizers/requirements.txt installs the full set: core + dfl + solver.)
 dfl = ["pyepo>=0.3"]
-plot = ["matplotlib"]
+solver = ["gurobipy>=11.0"]
+plot = ["matplotlib>=3.8"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

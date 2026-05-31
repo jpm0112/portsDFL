@@ -1,0 +1,8 @@
+# Optimizer stack — the BAP MILP (bap_optim).
+# Mirrors optimizers/pyproject.toml; this file is the full run-time set
+# (pyproject keeps a minimal core + optional [dfl]/[solver]/[plot] extras).
+numpy>=1.26
+pandas>=2.2
+pyomo>=6.7        # algebraic modeling layer for the MILP
+pyepo>=0.3        # decision-focused learning (discrete_bap subclasses PyEPO's optModel)
+gurobipy>=11.0    # default MILP solver (license at ~/gurobi.lic)

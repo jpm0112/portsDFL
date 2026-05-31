@@ -136,7 +136,7 @@ portsDFL/
     column_description.md            # Column definitions source (markdown)
     project_description.md           # This file (markdown)
     literature/                      # (was DFL_Port_Literature_Review/) lit review
-    meetings/latex/                  # (was meetings/) DFL explainer figures
+    meetings/                  # (was meetings/) DFL explainer figures
 ```
 
 ## Known Limitations

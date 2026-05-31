@@ -30,4 +30,4 @@ pdflatex bap_formulation && bibtex bap_formulation && pdflatex bap_formulation &
   primary papers were paywalled, so verify exact equation symbols / bibliographic
   details before external publication (see the caveats in the project notes).
 - The notation matches `optimizers/src/bap_optim/discrete_bap.py` and the style of
-  `meetings/latex/dfl_explainer.tex`.
+  `docs/meetings/dfl_explainer.tex`.

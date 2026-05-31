@@ -1,4 +1,4 @@
-# meetings/latex
+# meetings
 
 Self-contained LaTeX figures for committee meetings on the third paper
 of the dissertation: *Decision-Focused Learning for Berth Allocation*.
