@@ -186,12 +186,21 @@ class DiscreteBAP(optOmoModel):
         # the real DBAP objective (which references the mutable ``tau`` Param,
         # so τ updates propagate without rebuilding).
         self._model.del_component(self._model.obj)
-        # Total weighted completion time Σ wᵢ·(sᵢ + τᵢ). m.tau is the MUTABLE
-        # service-time Param, so the expression re-evaluates after τ updates.
-        obj_expr = sum(
-            self._model.weights[i] * (self._model.s[i] + self._model.tau[i])
-            for i in self._model.I
-        )
+        # Objective. With a navigation channel, minimise weighted DEPARTURE
+        # Σ wᵢ·(eoutᵢ + c) (penalises both entry- and exit-channel congestion);
+        # otherwise the classic weighted berth-completion Σ wᵢ·(sᵢ + τᵢ). m.tau is
+        # the MUTABLE service-time Param, so the expression re-evaluates after τ updates.
+        ch = self.instance.channel_time
+        if ch is not None:
+            obj_expr = sum(
+                self._model.weights[i] * (self._model.eout[i] + float(ch))
+                for i in self._model.I
+            )
+        else:
+            obj_expr = sum(
+                self._model.weights[i] * (self._model.s[i] + self._model.tau[i])
+                for i in self._model.I
+            )
         # Soft-window mode: add the tardiness penalty term.
         if not self.hard_windows and self._service_idx:
             obj_expr = obj_expr + self.penalty_weight * sum(
@@ -226,6 +235,9 @@ class DiscreteBAP(optOmoModel):
         B = inst.n_berths
         a = inst.arrivals
         w = inst.weights
+        # Optional single navigation channel (transit time c). None => no channel.
+        c = inst.channel_time
+        channel_on = c is not None
 
         # Fail loudly if a vessel has no compatible berth — structurally infeasible.
         for i in range(N):
@@ -281,7 +293,9 @@ class DiscreteBAP(optOmoModel):
         def _s_bounds(mm, i):
             lo = float(a[i])
             hi = None
-            if self.hard_windows and inst.is_service(i):
+            # Channel off: the hard no-wait window sits on the berth start s. When a
+            # channel is modelled the window moves to ENTRY (ein) instead (below).
+            if self.hard_windows and inst.is_service(i) and not channel_on:
                 li = inst.latest(i)
                 if li is not None:
                     hi = float(li)  # hard window: cannot start after lᵢ
@@ -291,16 +305,71 @@ class DiscreteBAP(optOmoModel):
         # z[i,j,b] = 1 means "i is served before j at berth b" (sequencing).
         m.z = pyo.Var(m.IJB, domain=pyo.Binary)
 
-        # Soft-window mode: allow lateness but penalise it. tard[r] ≥ 0 captures
-        # how far past the window r starts.
+        # --- Shared navigation channel (optional) ------------------------
+        # One channel every vessel transits to ENTER (before berthing) and EXIT
+        # (after service); no two transits — of any vessels, either direction —
+        # may overlap. ein[i]/eout[i] are the inbound/outbound transit start times.
+        if channel_on:
+            cc = float(c)
+            m.channel_time = pyo.Param(initialize=cc)
+            # big-M also large enough to serialise all 2N transits if needed.
+            m_ch = float(inst.big_m + 2.0 * N * cc)
+
+            def _ein_bounds(mm, i):
+                lo = float(a[i])
+                hi = None
+                # With a channel, the hard no-wait window means "enter on arrival".
+                if self.hard_windows and inst.is_service(i):
+                    li = inst.latest(i)
+                    if li is not None:
+                        hi = float(li)
+                return (lo, hi)
+
+            m.ein = pyo.Var(m.I, domain=pyo.NonNegativeReals, bounds=_ein_bounds)
+            m.eout = pyo.Var(m.I, domain=pyo.NonNegativeReals)
+            # Berth only after the inbound transit finishes; exit only after service.
+            m.enter_link = pyo.Constraint(m.I, rule=lambda mm, i: mm.s[i] >= mm.ein[i] + cc)
+            m.exit_link = pyo.Constraint(m.I, rule=lambda mm, i: mm.eout[i] >= mm.s[i] + mm.tau[i])
+
+            # Transit events: (i,"in") -> ein[i], (i,"out") -> eout[i]. Build the
+            # mutual-exclusion disjunction over every cross-vessel event pair (the
+            # same-vessel in/out pair is already ordered by the links above).
+            _events = [(i, k) for i in range(N) for k in ("in", "out")]
+            _pairs = [
+                (e[0], e[1], f[0], f[1])
+                for ei, e in enumerate(_events)
+                for f in _events[ei + 1:]
+                if e[0] != f[0]
+            ]
+            m.CHP = pyo.Set(initialize=_pairs, dimen=4)
+            m.y = pyo.Var(m.CHP, domain=pyo.Binary)
+
+            def _t(mm, i, k):
+                return mm.ein[i] if k == "in" else mm.eout[i]
+
+            # y=1 -> event (i,ki) precedes (j,kj); y=0 -> the reverse. Big-M turns
+            # off whichever direction is inactive (so the two can't overlap).
+            m.channel_fwd = pyo.Constraint(
+                m.CHP,
+                rule=lambda mm, i, ki, j, kj: _t(mm, j, kj)
+                >= _t(mm, i, ki) + cc - m_ch * (1 - mm.y[i, ki, j, kj]),
+            )
+            m.channel_bwd = pyo.Constraint(
+                m.CHP,
+                rule=lambda mm, i, ki, j, kj: _t(mm, i, ki)
+                >= _t(mm, j, kj) + cc - m_ch * mm.y[i, ki, j, kj],
+            )
+
+        # Soft-window mode: allow lateness but penalise it. tard[r] ≥ 0 captures how
+        # far past the window r starts — the ENTRY window when a channel is modelled,
+        # else the berth-start window.
         if not self.hard_windows and self._service_idx:
             m.S = pyo.Set(initialize=self._service_idx, dimen=1)
             m.tard = pyo.Var(m.S, domain=pyo.NonNegativeReals)
-            # tard[r] ≥ s[r] − lᵣ combined with tard ≥ 0 and the +penalty makes
-            # the solver set tard[r] = max(0, s[r] − lᵣ).
             m.tard_con = pyo.Constraint(
                 m.S,
-                rule=lambda mm, r: mm.tard[r] >= mm.s[r] - float(inst.latest(r)),
+                rule=lambda mm, r: mm.tard[r]
+                >= (mm.ein[r] if channel_on else mm.s[r]) - float(inst.latest(r)),
             )
 
         # --- Constraints --------------------------------------------------
@@ -418,6 +487,21 @@ class DiscreteBAP(optOmoModel):
 # ---------------------------------------------------------------------------
 # Decision-quality utilities (solver-independent)
 # ---------------------------------------------------------------------------
+
+def extract_channel(optmodel):
+    """Return ``(ein, eout)`` channel-transit start arrays from a solved model.
+
+    ``(None, None)`` when the instance has no channel (``channel_time is None``).
+    Vessel i enters during ``[ein[i], ein[i]+c]`` and departs at ``eout[i]+c``.
+    """
+    m = optmodel._model
+    if not hasattr(m, "ein"):
+        return None, None
+    n = optmodel.instance.n_vessels
+    ein = np.array([float(pyo.value(m.ein[i])) for i in range(n)], dtype=np.float32)
+    eout = np.array([float(pyo.value(m.eout[i])) for i in range(n)], dtype=np.float32)
+    return ein, eout
+
 
 def derive_starts_under_true_tau(
     assignment: np.ndarray,

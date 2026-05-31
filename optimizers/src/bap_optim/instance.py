@@ -50,6 +50,10 @@ class BAPInstance:
     latest_start: np.ndarray | None = None
     berth_compat: np.ndarray | None = None
     service: np.ndarray | None = None
+    # Single shared navigation channel: transit time (hours) each vessel needs to
+    # ENTER (before berthing) and to EXIT (after service). No two transits may
+    # overlap. ``None`` => no channel modelled (original berth-only behaviour).
+    channel_time: float | None = None
 
     # --- small read helpers (no mutation; safe on a frozen dataclass) ------
 
