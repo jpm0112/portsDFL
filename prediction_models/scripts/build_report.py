@@ -475,8 +475,11 @@ def _page_regret_distribution(pdf, data: dict):
 
     # Boxplot
     ax_box = fig.add_axes([0.10, 0.55, 0.36, 0.36])
-    bp = ax_box.boxplot([pto_r, dfl_r], labels=["PtO", "DFL"], patch_artist=True,
+    # FIX: matplotlib renamed boxplot's `labels=` to `tick_labels` (3.9) and removed
+    # `labels=` in 3.11; set the tick labels separately for version independence.
+    bp = ax_box.boxplot([pto_r, dfl_r], patch_artist=True,
                          showmeans=True, meanline=True)
+    ax_box.set_xticklabels(["PtO", "DFL"])
     for patch, color in zip(bp["boxes"], ["#d62728", "#1f77b4"]):
         patch.set_facecolor(color); patch.set_alpha(0.4)
     ax_box.set_ylabel("Per-instance regret (weighted h)")

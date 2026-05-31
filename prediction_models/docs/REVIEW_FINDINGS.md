@@ -36,11 +36,18 @@ empty-rows crash; `run_dfl_synthetic` DFL row label by method; `run_dfl_real_bap
    `DenseODSTBlock`; build `hidden_sizes` whenever `hidden_dim` OR `depth` is given). *Byte-compiles;
    needs `pytorch_tabular`/`pytabkit` installed to runtime-verify (libs absent here).*
 
-**Still open (reported, not changed):**
-4. 🟡 **`data_prep.py` unguarded `np.log(target)`**, **`build_clean_dataset` `Sitio` float/NaN**
-   normalization, and several empty-input crashes (`diagnostics` ppc, `build_report` boxplot
-   `labels=` removed in matplotlib 3.11).
-5. 🟡 **`test_encoders.py` "no-leak" test only checks column counts** — can't actually catch leakage.
+**Also FIXED (2026-05-31):**
+4. ✅ 🟡 **`data_prep.py`** now raises on non-positive targets before `np.log` (no silent
+   −inf/NaN); **`build_clean_dataset` `Sitio`** is normalised numerically (int 9 / float 9.0 /
+   "9" all → "Sitio 9") with NaN kept as NaN — *verified on a unit example*; **`diagnostics` ppc**
+   clamps the subsample to `min(n_draws, available)`; **`build_report`** boxplot uses
+   `set_xticklabels` instead of the matplotlib-removed `labels=` kwarg.
+5. ✅ 🟡 **`test_encoders.py`** — the mislabeled "no-leak" test renamed/redocumented as a
+   layout-consistency check (it never actually tested leakage); a true value-level leakage
+   assertion is left as a documented TODO.
+
+*The items in #4–5 byte-compile cleanly; they can't be run here (PyMC / matplotlib / the missing
+`ports_dfl.data` subpackage are absent), except the `Sitio` fix which is unit-verified.*
 
 Per-step detail follows.
 

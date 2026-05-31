@@ -264,9 +264,16 @@ def add_log_target(df: pd.DataFrame, target_col: str = "service_time_hours") -> 
         all use the exact same transform.
     """
     out = df.copy()
-    # NOTE: service_time_hours must be strictly > 0 here; any 0 -> -inf, any
-    # negative -> NaN (see REPORTED finding).
-    out["log_service_time"] = np.log(out[target_col].to_numpy())
+    vals = out[target_col].to_numpy()
+    # FIX: fail loudly on non-positive targets instead of silently producing
+    # -inf (log 0) / NaN (log<0), which would poison the Lognormal likelihood.
+    if not np.all(vals > 0):
+        n_bad = int((vals <= 0).sum())
+        raise ValueError(
+            f"add_log_target: {n_bad} row(s) have non-positive {target_col!r}; "
+            f"log() needs strictly positive service times (filter/clip upstream)."
+        )
+    out["log_service_time"] = np.log(vals)
     return out
 
 

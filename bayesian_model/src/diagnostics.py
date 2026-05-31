@@ -110,9 +110,11 @@ def posterior_predictive_check(
     # Flatten chain+draw into one "sample" axis (see _bhm_predictive_samples).
     pp = idata.posterior_predictive["log_y_obs"].stack(sample=("chain", "draw"))
     rng = np.random.default_rng(0)
-    # NOTE: raises if n_draws > total available samples (see REPORTED).
-    sample_idx = rng.choice(pp.sizes["sample"], size=n_draws, replace=False)
-    return pp.isel(sample=sample_idx).values.T  # (n_draws, n_obs)
+    # FIX: clamp to the number of available samples so short traces
+    # (chains*draws < n_draws) don't crash rng.choice(replace=False).
+    n_take = min(int(n_draws), int(pp.sizes["sample"]))
+    sample_idx = rng.choice(pp.sizes["sample"], size=n_take, replace=False)
+    return pp.isel(sample=sample_idx).values.T  # (n_take, n_obs)
 
 
 def compare_loo(traces: dict[str, az.InferenceData]) -> "az.compare":

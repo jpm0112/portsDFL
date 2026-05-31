@@ -60,9 +60,12 @@ def test_robust_scaler_changes_numeric_block(Xy) -> None:
     assert not np.allclose(standard, robust)
 
 
-def test_train_only_target_encoding_no_leak() -> None:
-    """Smoke test: fit on train, transform val gives different per-row encodings
-    when the train target distribution doesn't include val rows."""
+def test_train_fit_val_transform_layout_consistent() -> None:
+    """Fit on train, transform val -> identical feature LAYOUT (so a model can use
+    both). NOTE: this only checks the train-only-fit / val-transform pattern yields
+    a consistent column layout; it does NOT verify the encoder ignored val's target
+    (the original name/docstring overclaimed). A real value-level leakage assertion
+    is a TODO once a leaked-encoder oracle is wired in."""
     # Seeded for reproducible synthetic data.
     rng = np.random.default_rng(0)
     df = pd.DataFrame(

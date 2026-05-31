@@ -246,20 +246,18 @@ def normalise_terminal_and_site(df):
     df = df.copy()
     df["Terminal"] = df["Terminal"].replace(TERMINAL_MERGE)
 
-    # Cast Sitio to string first: BBDD stores the EPSA-era value as integer 9
-    # (not the string "9"), so a plain `replace` against the string key would
-    # silently miss those 23 rows. Stringifying makes the comparison robust to
-    # the source dtype.
-    # NOTE (reviewer): .astype(str) also rewrites any missing Sitio (NaN) to the
-    # literal string "nan", and if the column is float-typed it becomes "9.0"
-    # (not "9"), which would make the "== '9'" check below silently match nothing.
-    # See REPORTED items — left as-is because the source dtype can't be verified.
-    df["Sitio"] = df["Sitio"].astype(str)
+    # FIX: robust Sitio normalisation. Detect the raw "9" rows NUMERICALLY so int
+    # 9 / float 9.0 / str "9" all match (the old `== "9"` missed float-typed 9.0),
+    # and keep missing values as NaN (the old .astype(str) turned NaN into the
+    # literal string "nan").
+    sitio_num = pd.to_numeric(df["Sitio"], errors="coerce")
+    is_nine = sitio_num == 9
     # Sanity-check: every raw "9" Sitio must belong to QC before we rename it.
-    bad_sites = df.loc[df["Sitio"] == "9"]
-    if not bad_sites["Terminal"].eq("QC").all():
+    if not df.loc[is_nine, "Terminal"].eq("QC").all():
         raise ValueError("Found 'Sitio = 9' outside the QC terminal — refusing to rename.")
-    df["Sitio"] = df["Sitio"].replace(SITE_NORMALISE)
+    # Stringify the labels but leave NaN as NaN, then set the 9s.
+    df["Sitio"] = df["Sitio"].where(df["Sitio"].isna(), df["Sitio"].astype(str).str.strip())
+    df.loc[is_nine, "Sitio"] = "Sitio 9"
 
     print(f"  Merged {n_epsa} EPSA rows into QC")
     print(f"  Normalised Sitio label '9' -> 'Sitio 9'")
