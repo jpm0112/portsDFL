@@ -69,11 +69,11 @@ def build_model(
 
     with pm.Model(coords=coords) as model:
         # Mutable inputs so the same compiled model can be reused at predict time.
-        vessel_idx_data = pm.MutableData("vessel_idx", v_idx)
-        berth_idx_data = pm.MutableData("berth_idx", b_idx)
-        service_idx_data = pm.MutableData("service_idx", s_idx)
-        Z_data = pm.MutableData("Z", Z, dims=("obs", "feature"))
-        log_y_data = pm.MutableData("log_y", log_y)
+        vessel_idx_data = pm.Data("vessel_idx", v_idx)
+        berth_idx_data = pm.Data("berth_idx", b_idx)
+        service_idx_data = pm.Data("service_idx", s_idx)
+        Z_data = pm.Data("Z", Z, dims=("obs", "feature"))
+        log_y_data = pm.Data("log_y", log_y)
 
         # Global intercept on the log scale.
         alpha0 = pm.Normal("alpha0", mu=alpha0_mean, sigma=alpha0_sd)
