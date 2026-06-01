@@ -3,6 +3,9 @@
 # (pyproject keeps a minimal core + optional [dfl]/[solver]/[plot] extras).
 numpy>=1.26
 pandas>=2.2
-pyomo>=6.7        # algebraic modeling layer for the MILP
-pyepo>=0.3        # decision-focused learning (discrete_bap subclasses PyEPO's optModel)
-gurobipy>=11.0    # default MILP solver (license at ~/gurobi.lic)
+# Upper bound dodges a Pyomo 6.10 bug: its new gurobi_direct_minlp plugin sets
+# gurobipy minimum_version=12.0.0 then does `GRB = gurobipy.GRB` at import, which
+# hard-crashes when gurobipy < 12 (e.g. the v11 academic license). 6.8.x is clean.
+pyomo>=6.7,<6.9   # algebraic modeling layer for the MILP
+pyepo>=1.3        # decision-focused learning (discrete_bap subclasses PyEPO's optOmoModel)
+gurobipy>=11.0    # default MILP solver (license at ~/gurobi.lic; v11 academic license OK)

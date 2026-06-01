@@ -20,7 +20,9 @@ torchvision
 
 # Reference predictors
 lightgbm>=4.3
-pytabkit>=1.4              # RealMLP
+pytabkit>=1.4              # RealMLP (models/realmlp.py)
+pytorch_tabular>=1.1      # NODE (models/node.py)
+tabm>=0.0.3               # TabM (models/tabm.py)
 
 # Hyperparameter tuning
 optuna>=3.6

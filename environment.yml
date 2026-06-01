@@ -1,0 +1,32 @@
+# Dedicated conda environment for the whole portsDFL repo (optimizer + predictors
+# + bayesian model). Recreate with, FROM THE REPO ROOT (so the editable installs
+# resolve):
+#
+#     conda env create -f environment.yml
+#     # then activate:
+#     conda activate portsdfl
+#
+# Notes
+# -----
+# * GPU build: torch is pinned to the CUDA 11.8 wheels (matches the host's working
+#   setup). For a CPU-only box, drop the +cu118 pins and the --extra-index-url line.
+# * gurobipy is pinned to 11.0.2 to match the v11 academic license at ~/gurobi.lic.
+#   Do NOT bump to 12.x unless the license is reissued.
+# * pyomo is held below 6.9 (see optimizers/requirements.txt for why).
+# * The editable installs expose `bap_optim` and `ports_dfl` without PYTHONPATH,
+#   so the offline pyepo shim is no longer needed in this env.
+name: portsdfl
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu118
+      - torch==2.7.1+cu118
+      - torchvision==0.22.1+cu118
+      - gurobipy==11.0.2
+      - -r prediction_models/requirements.txt
+      - -r bayesian_model/requirements.txt
+      - -e ./optimizers
+      - -e ./prediction_models

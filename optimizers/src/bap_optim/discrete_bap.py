@@ -411,11 +411,13 @@ class DiscreteBAP(optOmoModel):
         # after this method returns. Our ``__init__`` replaces it with the
         # real weighted-completion-time objective (+ soft penalty) afterwards.
 
-        # PyEPO uses ``self.x`` as the decision representation. We expose
-        # start-time variables; the cost vector PyEPO passes (predicted τ)
-        # is wired through the mutable Param above.
-        x_list = [m.s[i] for i in range(N)]
-        return m, x_list
+        # PyEPO uses ``self.x`` as the decision representation. We expose the
+        # start-time variable component ``m.s`` (a Pyomo indexed Var keyed by
+        # 0..N-1). PyEPO's base ``optOmoModel`` iterates it as ``for k in self.x``
+        # / ``self.x[k]``, so it must be the indexed Var itself, NOT a Python list
+        # of VarData. The cost vector PyEPO passes (predicted τ) is wired through
+        # the mutable Param above.
+        return m, m.s
 
     # ----- PyEPO interface --------------------------------------------------
 
