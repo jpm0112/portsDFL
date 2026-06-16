@@ -18,14 +18,6 @@ dist/
 # --- Heavy generated outputs ---
 optuna_studies/
 
-# --- Proprietary port data (excluded from this repo) ---
-data/
-external_data/
-training_dataset.csv
-training_dataset_bhm.csv
-clean_dataset.csv
-*.xlsx
-
 # --- Secrets / licenses ---
 gurobi.lic
 *.env
