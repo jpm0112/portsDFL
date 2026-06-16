@@ -28,8 +28,9 @@ def test_dbap_solves_to_feasible(small_instance) -> None:
     starts, obj = model.solve()
     # Every start must be ≥ corresponding arrival (1e-3 float tolerance).
     assert (starts >= small_instance.arrivals - 1e-3).all()
-    # Weighted-completion-time objective is strictly positive here.
-    assert obj > 0
+    # Default 'waiting' objective Σᵢ (sᵢ − aᵢ) is nonnegative (≥ 0; >0 once any
+    # vessel has to wait for a berth, which it does at this contention).
+    assert obj >= -1e-3
 
 
 def test_extract_decision_assignment_sums_to_one(small_instance) -> None:
@@ -92,9 +93,9 @@ def test_fi_decision_is_minimum_cost(small_instance) -> None:
         cost, _ = schedule_cost_under_true_tau(
             a, o, true_tau, small_instance.arrivals, small_instance.weights
         )
-        # The -5.0 absolute slack absorbs the 0.5% MIP gap (a near-optimal solve
-        # can be slightly cheaper than the FI solve).
-        assert cost >= cost_fi - 5.0  # within solver gap
+        # With MIPGap=0 both solves are exact optima, so the FI solve cannot be
+        # beaten; the tiny slack only absorbs float32 reconstruction noise.
+        assert cost >= cost_fi - 1e-1
 
 
 def test_regret_is_nonnegative(small_instance) -> None:
@@ -122,5 +123,6 @@ def test_regret_is_nonnegative(small_instance) -> None:
     )
 
     # Regret = cost(predicted) − cost(FI) must be ≥ 0 by definition (FI is optimal
-    # under true τ). The -5.0 tolerance absorbs the solver's 0.5% MIP gap.
-    assert cost_pred - cost_fi >= -5.0  # solver gap allowance
+    # under true τ). With MIPGap=0 the FI solve is exact, so the tiny tolerance
+    # only absorbs float32 reconstruction noise.
+    assert cost_pred - cost_fi >= -1e-1

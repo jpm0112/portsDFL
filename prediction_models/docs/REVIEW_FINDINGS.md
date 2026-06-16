@@ -79,11 +79,11 @@ Per-step detail follows.
   arrivals.max() + n_vessels * tau_mean * (1 + k·tau_sigma) + margin` (a provably-safe upper
   bound). *(Note: `generate_bap_instance` in `discrete_bap.py` uses the looser, safe
   `horizon + 400`.)*
-- 🟡 **`discrete_bap.py` · `solve()` accepts `maxTimeLimit`** — if Gurobi hits the 60 s
-  `TimeLimit` before the 0.5 % MIP gap, `solve()` accepts the incumbent silently, so the
-  docstring's "within 0.5 % of optimum" guarantee (and clean regret comparisons) can be
-  violated on hard instances. **Suggested:** on `maxTimeLimit`, check the achieved gap (accept
-  only if ≤ 0.005) or log it; at minimum soften the docstring.
+- ✅ 🟡 **`discrete_bap.py` · `solve()` accepts `maxTimeLimit`** — FIXED. `MIPGap` is now
+  `0.0` (require provable optimality) and `solve()` accepts only `optimal`. `maxTimeLimit`
+  (and any other non-optimal status) now raises `RuntimeError` instead of silently returning a
+  suboptimal incumbent, so the regret ≥ 0 guarantee holds exactly. The 60 s `TimeLimit` is now
+  only a guard against a runaway solve — raise it if larger instances need more time.
 - 🟡 **`discrete_bap.py` · hard-window diagnostic** — if a service vessel has `latest(i) <
   arrivals[i]`, the start-var bounds become `(lo > hi)` and the solve fails with a generic
   "infeasible" rather than a clear "window earlier than arrival" message. **Suggested:** an

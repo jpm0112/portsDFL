@@ -1,0 +1,181 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{xcolor}
+
+% --- Notation shortcuts ----------------------------------------------------
+\newcommand{\I}{\mathcal{I}}
+\newcommand{\B}{\mathcal{B}}
+\newcommand{\Svc}{\mathcal{S}}
+\newcommand{\Evt}{\mathcal{E}}
+\newcommand{\Bi}{\mathcal{B}_i}
+\newcommand{\bigM}{M}
+\newcommand{\ein}{e^{\mathrm{in}}}
+\newcommand{\eout}{e^{\mathrm{out}}}
+
+\title{Discrete Berth Allocation with a Shared Navigation Channel,\\
+Vessel--Berth Compatibility, and Priority Berth Reservations}
+\author{portsDFL --- Port of San Antonio}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We schedule one week of vessel calls at the Port of San Antonio. Each vessel is
+assigned to a \emph{compatible} berth and a start time; a single
+\emph{navigation channel} (a shared one-vessel-at-a-time waterway) must be
+transited once to enter and once to exit; and a subset of priority
+\emph{service} vessels hold fixed berth-time \emph{reservations} that are kept
+exclusively for them. The model is solved for a chosen operational objective:
+total \emph{waiting time} or total \emph{berth idle time}. Objectives are
+unweighted (vessel priority weights are deferred). The service time $\tau$ that
+drives the schedule of the non-reserved vessels is supplied by an upstream
+predictor.
+\end{abstract}
+
+\section{Sets, parameters, and variables}
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+$\I=\{1,\dots,N\}$ & vessels in the planning week \\
+$\B=\{1,\dots,B\}$ & berths \\
+$\Bi\subseteq\B$ & berths \emph{compatible} with vessel $i$ \\
+$\Svc\subseteq\I$ & priority ``service'' vessels (fixed reservations) \\
+$\Evt=\{(i,\mathrm{in}),(i,\mathrm{out}):i\in\I\}$ & the $2N$ channel transit events \\
+\midrule
+$a_i\ge 0$ & arrival time of vessel $i$ \\
+$\tau_i>0$ & berth-occupation time: \emph{predicted} for $i\notin\Svc$, fixed at $D_r$ for $r\in\Svc$ \\
+$b_r\in\B$ & reserved berth of service vessel $r\in\Svc$ \quad(fixed input) \\
+$R_r\ge 0$ & reserved start time of service vessel $r$ \quad(fixed input) \\
+$D_r>0$ & reserved (committed) berth-occupation duration of $r$ \quad(fixed input) \\
+$c\ge 0$ & channel transit time (enter or exit) \\
+$\bigM$ & big-$M$ constant ($\ge$ horizon $+$ max berth workload) \\
+\midrule
+$x_{ib}\in\{0,1\}$ & $1$ if vessel $i$ uses berth $b$ \quad(only for $b\in\Bi$) \\
+$s_i\ge a_i$ & berth start time of vessel $i$ \\
+$z_{ijb}\in\{0,1\}$ & $1$ if $i$ precedes $j$ at berth $b$ \\
+$\ein_i\ge a_i$ & inbound (entry) channel-transit start \\
+$\eout_i\ge 0$ & outbound (exit) channel-transit start \\
+$y_{ef}\in\{0,1\}$ & $1$ if transit event $e$ precedes event $f$ \\
+$\mathit{LC}_b,\ \mathit{FS}_b\ge 0$ & last completion / first start at berth $b$ (idle objective) \\
+\bottomrule
+\end{tabular}
+\caption{Notation. Departure of vessel $i$ is $\eout_i+c$; transit event
+$(i,k)$ occupies the channel over $[t_{i}^{k},\,t_{i}^{k}+c]$ with
+$t_i^{\mathrm{in}}=\ein_i$ and $t_i^{\mathrm{out}}=\eout_i$.}
+\end{table}
+
+\section{Objective (selectable)}
+Service vessels are pinned by their reservations (\S below), so the optimization
+acts on the remaining non-service vessels $\I\setminus\Svc$. The model is solved
+for one of two unweighted operational objectives:
+\begin{align}
+\text{(Waiting)} \quad & \min\ \sum_{i\in\I\setminus\Svc}\bigl(\ein_i - a_i\bigr),
+   \label{eq:obj-wait}\\[2pt]
+\text{(Idle)} \quad & \min\ \sum_{b\in\B}\bigl(\mathit{LC}_b - \mathit{FS}_b\bigr).
+   \label{eq:obj-idle}
+\end{align}
+\emph{Waiting time}~\eqref{eq:obj-wait} is the total time the non-service vessels
+wait at anchorage before they may enter the channel; the service duration
+cancels, so only the controllable pre-berth delay is penalized. \emph{Berth idle
+time}~\eqref{eq:obj-idle} is summed over all berths, so a berth's occupied span
+includes any reserved blocks on it; since the total occupation $\sum_i\tau_i$ is
+a constant, minimizing idle time is equivalent to minimizing the summed
+per-berth occupied span $\sum_b(\mathit{LC}_b-\mathit{FS}_b)$, and the true idle
+KPI is this span minus $\sum_i\tau_i$.
+
+\section{Constraints}
+\paragraph{Assignment and arrival.}
+\begin{align}
+& \sum_{b\in\Bi} x_{ib} = 1 && \forall i\in\I \label{eq:assign}\\
+& \ein_i \ge a_i,\qquad s_i \ge a_i && \forall i\in\I\setminus\Svc \label{eq:arrival}
+\end{align}
+Constraint~\eqref{eq:assign} assigns each vessel to exactly one \emph{compatible}
+berth; the variables $x_{ib}$ exist only for $b\in\Bi$, so incompatible
+assignments are structurally excluded (for a service vessel $r$ we set
+$\mathcal{B}_r=\{b_r\}$, so this constraint pins it to its reserved berth).
+Constraint~\eqref{eq:arrival} is the dynamic arrival release: a non-service
+vessel may neither enter the channel nor begin berth service before it has
+arrived ($\ein_i\ge a_i$ and $s_i\ge a_i$). Service vessels are exempt---their
+timing is fixed by the reservation~\eqref{eq:reserve}, so a reserved block is
+held even if the vessel arrives earlier or later than $R_r$.
+
+\paragraph{Navigation channel.}
+\begin{align}
+& s_i \ge \ein_i + c && \forall i\in\I \label{eq:ch-in}\\
+& \eout_i \ge s_i + \tau_i && \forall i\in\I \label{eq:ch-out}\\
+& t_f \ge t_e + c - \bigM\,(1-y_{ef}) && \forall\, e,f\in\Evt,\ e<f,\ v(e)\ne v(f) \label{eq:ch-fwd}\\
+& t_e \ge t_f + c - \bigM\,y_{ef} && \forall\, e,f\in\Evt,\ e<f,\ v(e)\ne v(f) \label{eq:ch-bwd}
+\end{align}
+A vessel may berth only after its inbound transit finishes~\eqref{eq:ch-in}, and
+may begin its outbound transit only after service completes~\eqref{eq:ch-out}.
+Constraints~\eqref{eq:ch-fwd}--\eqref{eq:ch-bwd} are the channel
+mutual-exclusion disjunction: for every pair of transit events of
+\emph{different} vessels ($v(e)$ is event $e$'s vessel), one transit must clear
+the channel before the other starts---so the channel holds exactly one vessel at
+a time, in either direction. The same-vessel pair
+$(i,\mathrm{in}),(i,\mathrm{out})$ is already ordered
+by~\eqref{eq:ch-in}--\eqref{eq:ch-out}. Setting $c=0$ collapses the transit
+constraints, recovering the berth-only model.
+
+\paragraph{Berth sequencing (no overlap).}
+\begin{align}
+& z_{ijb} + z_{jib} \le 1 && \forall b,\ i<j:\ b\in\Bi\cap\B_j \label{eq:one}\\
+& z_{ijb} + z_{jib} \ge x_{ib} + x_{jb} - 1 && \forall b,\ i<j:\ b\in\Bi\cap\B_j \label{eq:order}\\
+& s_j \ge s_i + \tau_i - \bigM\,(1 - z_{ijb}) && \forall (i,j,b),\ i\ne j:\ b\in\Bi\cap\B_j \label{eq:prec}
+\end{align}
+Constraint~\eqref{eq:one} permits at most one ordering direction for a pair at
+berth $b$. Constraint~\eqref{eq:order} forces an ordering whenever both vessels
+are assigned to $b$: its right-hand side equals $1$ only when $x_{ib}=x_{jb}=1$,
+and is non-positive (vacuous) otherwise. The big-$M$ precedence~\eqref{eq:prec}
+then keeps the later vessel from starting until the earlier one finishes, so
+their berth occupations cannot overlap. Precedence triples and $z$ variables are
+created only for pairs that can share a berth ($b\in\Bi\cap\B_j$).
+
+\paragraph{Priority berth reservations.}
+\begin{align}
+& s_r = R_r, \qquad \tau_r = D_r && \forall r\in\Svc \label{eq:reserve}
+\end{align}
+Each service vessel $r$ carries a reservation $(b_r,R_r,D_r)$ given as fixed
+input. Together with $\mathcal{B}_r=\{b_r\}$ in~\eqref{eq:assign},
+constraint~\eqref{eq:reserve} pins $r$ to its reserved berth, start time, and
+occupation duration, so $r$ holds the interval $[R_r,\,R_r+D_r]$ on berth $b_r$.
+Exclusivity needs no extra constraint: the no-overlap
+sequencing~\eqref{eq:one}--\eqref{eq:prec}, applied between $r$ and any other
+vessel eligible for berth $b_r$, keeps that interval empty of all other
+vessels---the slot is \emph{left empty}, with no backfilling, regardless of
+whether $r$ arrives before or after $R_r$. The reservation blocks only the
+berth: service vessels still transit the shared channel like any other vessel
+(\eqref{eq:ch-in}--\eqref{eq:ch-bwd}).
+
+\paragraph{Berth idle-time linearization} (only for objective~\eqref{eq:obj-idle}).
+\begin{align}
+& \mathit{LC}_b \ge s_i + \tau_i - \bigM\,(1-x_{ib}) && \forall i,\ b\in\Bi \label{eq:idle-lc}\\
+& \mathit{FS}_b \le s_i + \bigM\,(1-x_{ib}) && \forall i,\ b\in\Bi \label{eq:idle-fs}\\
+& \mathit{FS}_b \le \mathit{LC}_b && \forall b\in\B \label{eq:idle-span}
+\end{align}
+Under minimization, $\mathit{LC}_b$ is driven down to the latest completion and
+$\mathit{FS}_b$ up to the earliest start among vessels assigned to berth $b$;
+the big-$M$ switches each bound off for vessels not at $b$. Constraint
+\eqref{eq:idle-span} caps an empty berth's span at zero.
+
+\section{Implementation pointers}
+The MILP is \texttt{DiscreteBAP} in
+\texttt{optimizers/src/bap\_optim/discrete\_bap.py}, with constructor argument
+\texttt{objective\,$\in$\,\{"waiting","idle"\}}. The instance descriptor
+\texttt{BAPInstance} (in \texttt{bap\_optim/instance.py}) carries
+\texttt{arrivals}, \texttt{berth\_compat}, \texttt{channel\_time}, and the
+service reservations as fixed $(b_r,R_r,D_r)$ inputs. \emph{Note:} the code
+still implements the earlier no-wait window (the \texttt{service} /
+\texttt{latest\_start} fields and \texttt{hard\_windows} flag); migrating it to
+the reservation model of~\eqref{eq:reserve} is a pending change.
+
+\end{document}

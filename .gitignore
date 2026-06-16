@@ -27,3 +27,10 @@ gurobi.lic
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# --- LaTeX build artifacts ---
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz

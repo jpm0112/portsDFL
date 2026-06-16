@@ -24,8 +24,14 @@ Multi-berth scheduling formulation, classical-literature time-precedence variant
       x[i,b] ∈ {0,1}     vessel i is processed at berth b   (only for b ∈ Bᵢ)
       s[i] ≥ aᵢ          start time of vessel i
       z[i,j,b] ∈ {0,1}   vessel i precedes vessel j at berth b
-  - Objective:
-      min Σᵢ wᵢ · (s[i] + τᵢ)              ← total weighted completion time
+  - Objective (selectable at construction via ``objective=``; unweighted —
+    vessel priority weights come later):
+      "waiting"  min Σᵢ (entryᵢ − aᵢ)       ← total waiting time. entryᵢ is the
+                                              channel-entry time ein when a
+                                              channel is modelled, else berth start s.
+      "idle"     min Σ_b (LC_b − FS_b)       ← total berth idle time, expressed as
+                                              the summed per-berth occupied span
+                                              (true idle KPI = span − Στ).
       (+ soft tardiness penalty in soft-window mode, see below)
   - Constraints:
       Σ_{b∈Bᵢ} x[i,b] = 1                   (each vessel assigned, compatible berth)
@@ -164,15 +170,22 @@ class DiscreteBAP(optOmoModel):
         solver_name: str = "gurobi",
         hard_windows: bool = True,
         penalty_weight: float = 1000.0,
+        objective: str = "waiting",
     ) -> None:
         self.instance = instance
         # These must be set BEFORE super().__init__(), because the base
-        # __init__ calls self._getModel() (which reads self.hard_windows) and
-        # because PyEPO's multiprocessing path reconstructs the model from
-        # same-named instance attributes (getArgs). Store every __init__ arg.
+        # __init__ calls self._getModel() (which reads self.hard_windows and
+        # self.objective) and because PyEPO's multiprocessing path reconstructs
+        # the model from same-named instance attributes (getArgs). Store every
+        # __init__ arg.
         self.solver_name = solver_name
         self.hard_windows = bool(hard_windows)
         self.penalty_weight = float(penalty_weight)
+        if objective not in ("waiting", "idle"):
+            raise ValueError(
+                f"objective must be 'waiting' or 'idle', got {objective!r}"
+            )
+        self.objective = objective
         # Service vessels with a finite window (populated in _getModel).
         self._service_idx: list[int] = []
 
@@ -186,32 +199,34 @@ class DiscreteBAP(optOmoModel):
         # the real DBAP objective (which references the mutable ``tau`` Param,
         # so τ updates propagate without rebuilding).
         self._model.del_component(self._model.obj)
-        # Objective. With a navigation channel, minimise weighted DEPARTURE
-        # Σ wᵢ·(eoutᵢ + c) (penalises both entry- and exit-channel congestion);
-        # otherwise the classic weighted berth-completion Σ wᵢ·(sᵢ + τᵢ). m.tau is
-        # the MUTABLE service-time Param, so the expression re-evaluates after τ updates.
-        ch = self.instance.channel_time
-        if ch is not None:
-            obj_expr = sum(
-                self._model.weights[i] * (self._model.eout[i] + float(ch))
-                for i in self._model.I
-            )
-        else:
-            obj_expr = sum(
-                self._model.weights[i] * (self._model.s[i] + self._model.tau[i])
-                for i in self._model.I
-            )
-        # Soft-window mode: add the tardiness penalty term.
+        # Operational objective (unweighted — vessel priority weights come later).
+        # Two modes, selected at construction via ``objective``:
+        #   "waiting" — total waiting time Σᵢ (entryᵢ − aᵢ), where entryᵢ is the
+        #               channel-entry time ``ein`` when a channel is modelled,
+        #               else the berth start ``s``. Service time cancels, so this
+        #               captures only the controllable pre-berth delay.
+        #   "idle"    — total berth idle time. Total service Στ is constant, so
+        #               minimising idle ≡ minimising the summed per-berth occupied
+        #               span Σ_b (LC[b] − FS[b]) (LC/FS built in _getModel). The
+        #               true idle KPI is that span minus Στ.
+        m = self._model
+        channel_on = self.instance.channel_time is not None
+        if self.objective == "waiting":
+            entry = (lambda i: m.ein[i]) if channel_on else (lambda i: m.s[i])
+            obj_expr = sum(entry(i) - m.arrivals[i] for i in m.I)
+        else:  # "idle"
+            obj_expr = sum(m.LC[b] - m.FS[b] for b in m.B)
+        # Soft-window mode: keep every solve feasible by penalising lateness.
         if not self.hard_windows and self._service_idx:
             obj_expr = obj_expr + self.penalty_weight * sum(
-                self._model.tard[r] for r in self._service_idx
+                m.tard[r] for r in self._service_idx
             )
         self._model.obj = pyo.Objective(expr=obj_expr, sense=pyo.minimize)
 
         # Gurobi-friendly options; other solvers ignore unrecognised keys.
         if hasattr(self._solverfac, "options"):
-            self._solverfac.options["MIPGap"] = 0.005     # stop within 0.5% of optimal
-            self._solverfac.options["TimeLimit"] = 60     # give up after 60 seconds
+            self._solverfac.options["MIPGap"] = 0.0       # require provable optimality
+            self._solverfac.options["TimeLimit"] = 60     # safety guard: solve() raises if hit
             self._solverfac.options["OutputFlag"] = 0     # silence solver logging
 
     @property
@@ -406,10 +421,35 @@ class DiscreteBAP(optOmoModel):
             >= mm.s[i] + mm.tau[i] - mm.big_m * (1 - mm.z[i, j, b]),
         )
 
+        # --- Berth idle-time objective support (only for objective="idle") ---
+        # LC[b] = last service completion at berth b; FS[b] = first berth start
+        # at b. The objective minimises Σ_b (LC[b] − FS[b]) = total occupied
+        # span; since total service Στ is constant, that is equivalent to
+        # minimising total berth idle time. Big-M switches the bound off for
+        # vessels NOT assigned to b. Minimisation drives LC[b] down to the true
+        # max completion and FS[b] up to the true min start. Capping FS ≤ LC
+        # forces empty berths (where LC→0) to contribute a zero span.
+        if self.objective == "idle":
+            m.LC = pyo.Var(m.B, domain=pyo.NonNegativeReals)
+            m.FS = pyo.Var(m.B, domain=pyo.NonNegativeReals)
+            m.idle_last = pyo.Constraint(
+                m.XIB,
+                rule=lambda mm, i, b: mm.LC[b]
+                >= mm.s[i] + mm.tau[i] - mm.big_m * (1 - mm.x[i, b]),
+            )
+            m.idle_first = pyo.Constraint(
+                m.XIB,
+                rule=lambda mm, i, b: mm.FS[b]
+                <= mm.s[i] + mm.big_m * (1 - mm.x[i, b]),
+            )
+            m.idle_span = pyo.Constraint(
+                m.B, rule=lambda mm, b: mm.FS[b] <= mm.LC[b]
+            )
+
         # The objective is intentionally NOT set here — the parent
         # ``optOmoModel.__init__`` will install ``Objective(expr=0)`` right
         # after this method returns. Our ``__init__`` replaces it with the
-        # real weighted-completion-time objective (+ soft penalty) afterwards.
+        # real operational objective (waiting / idle, + soft penalty) afterwards.
 
         # PyEPO uses ``self.x`` as the decision representation. We expose the
         # start-time variable component ``m.s`` (a Pyomo indexed Var keyed by
@@ -449,33 +489,42 @@ class DiscreteBAP(optOmoModel):
             self._model.tau[i].set_value(float(c[i]))
 
     def solve(self) -> tuple[np.ndarray, float]:
-        """Solve the MILP. Returns ``(start_times, objective)``.
+        """Solve the MILP to proven optimality. Returns ``(start_times, objective)``.
 
-        Accepts ``optimal``, ``feasible``, and ``maxTimeLimit`` (when MIPGap
-        was met) termination conditions. The configured 0.5 % MIP gap means
-        any "feasible" return is provably within 0.5 % of optimum, which
-        keeps regret comparisons clean.
+        With ``MIPGap=0`` only ``optimal`` is accepted, so every returned
+        solution is a proven global optimum — this keeps regret comparisons
+        exact (regret is provably >= 0 only when both the predicted and the
+        full-information solves are true optima).
 
-        In hard-window mode an over-constrained instance can be ``infeasible``;
-        this raises ``RuntimeError`` (callers — e.g. the weekly planner —
-        should catch it and report the conflicting service vessels).
+        Raises ``RuntimeError`` if the solver does not prove optimality:
+
+        * ``infeasible`` — in hard-window mode an over-constrained instance has
+          no feasible schedule (callers — e.g. the weekly planner — should
+          catch this and report the conflicting service vessels).
+        * ``maxTimeLimit`` (or any other non-optimal status) — the solver hit
+          the 60s guard before proving optimality. Rather than silently using a
+          suboptimal incumbent (which would corrupt regret), this is surfaced
+          as an error; raise ``TimeLimit`` if larger instances need more time.
         """
         results = self._solverfac.solve(self._model, tee=False)
         status = results.solver.termination_condition
-        # NOTE: a plain maxTimeLimit only implies a within-gap solution if the
-        # 0.5% MIPGap was actually reached before the 60s limit — see REPORT in review.
-        accepted = (
-            TerminationCondition.optimal,
-            TerminationCondition.feasible,
-            TerminationCondition.maxTimeLimit,
-            TerminationCondition.locallyOptimal,
-        )
-        if status not in accepted:
+        if status != TerminationCondition.optimal:
+            if status in (
+                TerminationCondition.infeasible,
+                TerminationCondition.infeasibleOrUnbounded,
+            ):
+                raise RuntimeError(
+                    f"DBAP instance is infeasible "
+                    f"(N={self.instance.n_vessels}, B={self.instance.n_berths}). "
+                    f"In hard-window mode this usually means the service vessels "
+                    f"cannot all be berthed within their no-wait windows."
+                )
             raise RuntimeError(
-                f"DBAP solver returned termination_condition={status} "
+                f"DBAP solver did not prove optimality: "
+                f"termination_condition={status} "
                 f"(N={self.instance.n_vessels}, B={self.instance.n_berths}). "
-                f"In hard-window mode this usually means the service vessels "
-                f"cannot all be berthed within their no-wait windows."
+                f"The 60s TimeLimit was likely hit before closing the MIP gap; "
+                f"increase TimeLimit for larger instances."
             )
 
         N = self.instance.n_vessels
