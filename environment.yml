@@ -1,6 +1,5 @@
-# Dedicated conda environment for the whole portsDFL repo (optimizer + predictors
-# + bayesian model). Recreate with, FROM THE REPO ROOT (so the editable installs
-# resolve):
+# Dedicated conda environment for the whole portsDFL repo (optimizer + predictors).
+# Recreate with, FROM THE REPO ROOT (so the editable installs resolve):
 #
 #     conda env create -f environment.yml
 #     # then activate:
@@ -27,6 +26,5 @@ dependencies:
       - torchvision==0.22.1+cu118
       - gurobipy==11.0.2
       - -r prediction_models/requirements.txt
-      - -r bayesian_model/requirements.txt
       - -e ./optimizers
       - -e ./prediction_models

@@ -16,7 +16,6 @@ dist/
 .ipynb_checkpoints/
 
 # --- Heavy generated outputs ---
-bayesian_model/outputs/
 optuna_studies/
 
 # --- Proprietary port data (excluded from this repo) ---

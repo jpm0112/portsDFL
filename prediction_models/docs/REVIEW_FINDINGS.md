@@ -8,16 +8,15 @@ Severity: 🔴 likely bug / correctness · 🟡 robustness / edge case · ⚪ st
 
 ## Summary
 
-~84 Python files across `prediction_models/`, `bayesian_model/`, and repo-root `src/` were
-reviewed and given beginner-friendly comments (in 6 steps, each its own commit). The repo
+~61 Python files across `prediction_models/` and repo-root `src/` were
+reviewed and given beginner-friendly comments (in 5 steps, each its own commit). The repo
 byte-compiles cleanly and the 17 BAP tests still pass against Gurobi after annotation.
 
-**11 clear fixes applied** (all crash-safe / behavior-neutral):
+**8 clear fixes applied** (all crash-safe / behavior-neutral):
 `berths.py` integer-`Sitio` `KeyError`; `weekly_instance` `n_services` `IndexError`;
 `optim/__init__` type-check imports; `pto.predict_pto` empty-input crash; `plan_week._write_csv`
 empty-rows crash; `run_dfl_synthetic` DFL row label by method; `run_dfl_real_bap` return-type hint;
-`benchmark_dbb` dead `import os`; `compare_models` leaked file handle; `report.py` hardcoded
-"661 vessel calls"; `figures.py` dead `rng` vars.
+`benchmark_dbb` dead `import os`.
 
 **Top issues — FIXED (2026-05-31):**
 1. ✅ 🔴 **`build_training_dataset.py` group-feature leakage** — FIXED. The cross-vessel group
@@ -37,16 +36,14 @@ empty-rows crash; `run_dfl_synthetic` DFL row label by method; `run_dfl_real_bap
    needs `pytorch_tabular`/`pytabkit` installed to runtime-verify (libs absent here).*
 
 **Also FIXED (2026-05-31):**
-4. ✅ 🟡 **`data_prep.py`** now raises on non-positive targets before `np.log` (no silent
-   −inf/NaN); **`build_clean_dataset` `Sitio`** is normalised numerically (int 9 / float 9.0 /
-   "9" all → "Sitio 9") with NaN kept as NaN — *verified on a unit example*; **`diagnostics` ppc**
-   clamps the subsample to `min(n_draws, available)`; **`build_report`** boxplot uses
-   `set_xticklabels` instead of the matplotlib-removed `labels=` kwarg.
+4. ✅ 🟡 **`build_clean_dataset` `Sitio`** is normalised numerically (int 9 / float 9.0 /
+   "9" all → "Sitio 9") with NaN kept as NaN — *verified on a unit example*; **`build_report`**
+   boxplot uses `set_xticklabels` instead of the matplotlib-removed `labels=` kwarg.
 5. ✅ 🟡 **`test_encoders.py`** — the mislabeled "no-leak" test renamed/redocumented as a
    layout-consistency check (it never actually tested leakage); a true value-level leakage
    assertion is left as a documented TODO.
 
-*The items in #4–5 byte-compile cleanly; they can't be run here (PyMC / matplotlib / the missing
+*The items in #4–5 byte-compile cleanly; they can't be run here (matplotlib / the missing
 `ports_dfl.data` subpackage are absent), except the `Sitio` fix which is unit-verified.*
 
 Per-step detail follows.
@@ -231,52 +228,6 @@ All 15 test files annotated for beginners: `test_*` auto-discovery, `@pytest.fix
 fixtures-as-arguments + scope, bare `assert`, `pytest.approx`, `np.testing.assert_allclose`,
 `pytest.raises`, `pytest.importorskip`/`mark.skipif`/`mark.slow`, `tmp_path`, and the
 arrange–act–assert structure.
-
----
-
-## `bayesian_model/` — src/models/tests (step E)
-
-PyMC/ArviZ are not installed here, so review was static (byte-compile + careful read). The
-statistical core was checked and is sound — agents re-derived the CRPS estimator, the log-normal
-LPD Jacobian, the non-centered hierarchy, and the OOV zero-slot indexing, and found no math bugs.
-
-### Bugs fixed
-- ⚪ **`src/compare_models.py`** — `yaml.safe_load(open(cfg_path))` leaked the file handle.
-  **Fixed:** wrapped in `with open(...) as f:`.
-- ⚪ **`src/report.py`** — a section heading hard-coded "661 vessel calls". **Fixed:** use the
-  computed `{n_test}` hold-out size so it can't drift.
-- ⚪ **`src/figures.py`** — removed two dead `rng = np.random.default_rng(...)` variables (sampling
-  uses `random_state=` instead; behavior unchanged).
-
-### Issues reported (not changed)
-- 🟡 **`src/data_prep.py` · `add_log_target`** — `np.log(target)` is unguarded: a
-  `service_time_hours == 0` → `-inf`, negatives → `NaN`, silently poisoning the log-scale
-  likelihood. The docstring assumes positive targets but nothing enforces it. Clip/validate/drop
-  (a modeling choice). Also: genuine missing categories on *train* rows map to the same OOV slot
-  (-1) as unseen levels — indistinguishable.
-- 🟡 **`src/diagnostics.py` · `posterior_predictive_check`** — `rng.choice(n, size=n_draws,
-  replace=False)` raises if `n_draws` (default 200) exceeds available posterior-predictive samples
-  (short CI traces). Clamp `size=min(n_draws, available)`.
-- 🟡 **`src/figures.py` · `figure_borrowed_strength`** — `.sample(max(1, count))` requests a row
-  from an empty group when a category has 0 cells → `ValueError`; also the `k` parameter is unused.
-- ⚪ **`src/evaluation.py` / `diagnostics.py`** — relies on ArviZ APIs that have shifted across
-  versions (`az.compare(ic=...)`, `idata_kwargs`); pin/verify the installed ArviZ. The CRPS uses
-  the biased `1/n²` normalization (a defensible, documented choice — not a bug).
-- ⚪ **`src/models/registry.py`** — `set_predict_data` re-implements M4's interaction-index remap
-  inline instead of reusing `remap_interaction_for_prediction` (currently identical → DRY/drift
-  hazard).
-- ⚪ **`src/fit.py`** — `with_cov` is computed but unused (covariates are always built); dead.
-- ⚪ **`src/models/bhm_*` & tests** — several harmless unused imports (`numpy`, `OOV_INDEX`,
-  `pytest`, `json`); a vestigial `tau_vb` prior in the degenerate interaction branch; and tight,
-  seed-dependent numeric tolerances in the model tests (keep the HDI-containment checks; loosen
-  only the point tolerances if flakiness ever appears).
-
-### Commenting
-All ~23 files annotated for beginners: PyMC/ArviZ concepts (`with pm.Model()` context, priors
-`pm.Normal`/`HalfNormal`/`StudentT`/`Gamma`, non-centered `tau*z` parameterization,
-`pm.Deterministic`, `observed=` likelihood, `pm.sample` MCMC args, `pm.set_data`/`MutableData`,
-`sample_posterior_predictive`, `az.summary`/`loo`/r-hat/ESS) plus the Python syntax (dataclasses,
-type hints, comprehensions, `with`, f-strings, OOV zero-slot trick, cyclic sin/cos encodings).
 
 ---
 

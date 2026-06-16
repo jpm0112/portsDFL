@@ -11,12 +11,11 @@ against the standard **predict-then-optimize (PtO)** baseline.
 ```
  source workbook ─► data_pipeline ─► training_dataset.csv
                                           │
-                          ┌───────────────┴───────────────┐
-                          ▼                                ▼
-                  prediction_models                  bayesian_model
-                 (PtO + DFL predict τ̂)            (PyMC service-time
-                          │                          models, alt. approach)
-                          ▼
+                                          ▼
+                                  prediction_models
+                                 (PtO + DFL predict τ̂)
+                                          │
+                                          ▼
                  BAP MILP (the optimizer)  ──►  weekly berth schedule
 ```
 
@@ -27,7 +26,6 @@ against the standard **predict-then-optimize (PtO)** baseline.
 | **`data_pipeline/`** | Standalone scripts that turn the source Excel workbook into `clean_dataset.csv` and `training_dataset.csv` (cleaning, targets, leakage-safe features). |
 | **`optimizers/`** | The optimization layer: the discrete BAP **MILP** + the deterministic **weekly planner** (the `bap_optim` package). Self-contained — usable and testable without the proprietary data. |
 | **`prediction_models/`** | The main DFL project: the `ports_dfl` package (PtO + DFL training, models, tuning). Imports `bap_optim`. Has its own README. |
-| **`bayesian_model/`** | A separate PyMC subproject: hierarchical models that predict service time with calibrated uncertainty. |
 | **`docs/`** | `project_description.md`, `column_description.md`, plus `literature/` and `meetings/`. |
 
 Start with **`prediction_models/README.md`** for the modelling/optimization detail, and
@@ -38,6 +36,6 @@ Start with **`prediction_models/README.md`** for the modelling/optimization deta
 The proprietary port data (`data/`, `external_data/`, the source `*.xlsx`) is **gitignored and
 not included** — you supply it locally. Two known gaps in a fresh clone (see
 `prediction_models/docs/REVIEW_FINDINGS.md`): the `ports_dfl.data` loader subpackage is missing,
-and the model/solver stack (`pyepo`, `torch`, PyMC, Gurobi) must be installed per each
+and the model/solver stack (`pyepo`, `torch`, Gurobi) must be installed per each
 subproject's requirements. The **optimizer layer is self-contained and runs/tests independently**
 of the proprietary data.

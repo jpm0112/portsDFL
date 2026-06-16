@@ -3,8 +3,7 @@
 Self-contained LaTeX figures for committee meetings on the third paper
 of the dissertation: *Decision-Focused Learning for Berth Allocation*.
 
-The Bayesian sub-project is intentionally not covered here; figures
-focus on the DFL pipeline (`prediction_models/`).
+The figures focus on the DFL pipeline (`prediction_models/`).
 
 ## Build
 

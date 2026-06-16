@@ -365,10 +365,6 @@ assume about it.
   \item Sample many service-time scenarios from a predictive
         distribution; minimize average cost across scenarios in one
         large MILP.
-  \item \textbf{Bayesian source.} The hierarchical models in
-        \texttt{bayesian\_model/} (M2 heavy-tail, M3 heteroscedastic)
-        are the natural scenario source: each posterior draw is one
-        vessel-correlated scenario.
   \item MILP size grows linearly with scenario count; solution quality
         is bounded by scenario fidelity.
   \item \emph{Refs:} Birge \& Louveaux (2011); Karam \& Eltawil (2016).
@@ -380,9 +376,6 @@ assume about it.
 \begin{itemize}[leftmargin=2em, itemsep=0pt]
   \item Pick the schedule that performs best against the worst
         plausible distribution from a family centred on the data.
-  \item \textbf{Bayesian source.} The same hierarchical models supply
-        both the centre (posterior predictive) and the radius
-        (posterior spread), so SAA and DRO share one back-end.
   \item Less conservative than RO; tractability depends on the family
         of distributions chosen.
   \item \emph{Refs:} Esfahani \& Kuhn (2018); Delage \& Ye (2010).
@@ -407,9 +400,7 @@ assume about it.
 times. RO worst-cases over bounds; SP averages over scenarios; DRO
 hedges over distributions; end-to-end ML replaces the MILP entirely.
 DFL (this paper, Figure~4) keeps the MILP and trains the predictor to
-make its decisions good. The Bayesian hierarchical models in
-\texttt{bayesian\_model/} feed SAA scenarios, DRO ambiguity radii, and
-RO bounds from a single back-end.}
+make its decisions good.}
 
 \newpage
 
