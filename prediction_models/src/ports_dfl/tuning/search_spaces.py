@@ -65,3 +65,55 @@ def suggest_node(trial: optuna.Trial) -> dict[str, Any]:
         "lr": trial.suggest_float("lr", 1e-4, 1e-2, log=True),
         "weight_decay": trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True),
     }
+
+
+def suggest_xgb(trial: optuna.Trial) -> dict[str, Any]:
+    """Search space for the XGBoost benchmark.
+
+    ``n_estimators`` is intentionally absent: it's fixed high in the model and
+    early stopping selects the effective count, so tuning it would be redundant.
+    """
+    return {
+        "learning_rate": trial.suggest_float("learning_rate", 1e-3, 3e-1, log=True),
+        "max_depth": trial.suggest_int("max_depth", 3, 10),
+        "min_child_weight": trial.suggest_float("min_child_weight", 1e-1, 1e2, log=True),
+        "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+        "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+        "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 1e2, log=True),
+        "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 1e2, log=True),
+        "gamma": trial.suggest_float("gamma", 1e-3, 1e1, log=True),
+    }
+
+
+def suggest_lgbm(trial: optuna.Trial) -> dict[str, Any]:
+    """Search space for the LightGBM benchmark.
+
+    Like XGBoost, ``n_estimators`` is fixed high + early stopping, so it isn't
+    tuned here.
+    """
+    return {
+        "learning_rate": trial.suggest_float("learning_rate", 1e-3, 3e-1, log=True),
+        "num_leaves": trial.suggest_int("num_leaves", 15, 255),
+        "max_depth": trial.suggest_int("max_depth", 3, 12),
+        "min_child_samples": trial.suggest_int("min_child_samples", 5, 100),
+        "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+        "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+        "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 1e2, log=True),
+        "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 1e2, log=True),
+    }
+
+
+def suggest_rf(trial: optuna.Trial) -> dict[str, Any]:
+    """Search space for the RandomForest benchmark.
+
+    Deliberately small: RandomForest is robust to tuning — more trees only help
+    with diminishing returns, and the needle-movers are ``max_features`` and
+    leaf size — so a few categorical choices suffice.
+    """
+    return {
+        "n_estimators": trial.suggest_categorical("n_estimators", [300, 500, 800]),
+        "max_features": trial.suggest_categorical("max_features", ["sqrt", "log2", 0.5, 1.0]),
+        "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 20),
+        "max_depth": trial.suggest_categorical("max_depth", [None, 10, 20, 30]),
+        "min_samples_split": trial.suggest_int("min_samples_split", 2, 20),
+    }

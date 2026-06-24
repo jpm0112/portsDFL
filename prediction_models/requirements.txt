@@ -20,6 +20,7 @@ torchvision
 
 # Reference predictors
 lightgbm>=4.3
+xgboost>=2.0              # XGBoost benchmark (models/xgb.py)
 pytabkit>=1.4              # RealMLP (models/realmlp.py)
 pytorch_tabular>=1.1      # NODE (models/node.py)
 tabm>=0.0.3               # TabM (models/tabm.py)
