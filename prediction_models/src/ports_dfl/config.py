@@ -4,6 +4,7 @@ Single source of truth for path resolution and reproducibility settings.
 Imported by data loaders, training scripts, and test harnesses.
 """
 
+import os
 import random
 from pathlib import Path
 
@@ -15,7 +16,14 @@ import torch
 #   src/ports_dfl/config.py  ->  prediction_models/
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
 
-DATA_PATH: Path = PROJECT_ROOT / "training_dataset.csv"
+# Cluster runs export $PORTSDFL_DATA; locally it defaults to the repo-root data/
+# file (one level above prediction_models/), which is where training_dataset.csv
+# actually lives. Override lets an ASAX job point at the data without a hardcoded path.
+DATA_PATH: Path = Path(
+    os.environ.get(
+        "PORTSDFL_DATA", str(PROJECT_ROOT.parent / "data" / "training_dataset.csv")
+    )
+)
 RESULTS_DIR: Path = PROJECT_ROOT / "results"
 OPTUNA_DB_DIR: Path = PROJECT_ROOT / "optuna_studies"
 

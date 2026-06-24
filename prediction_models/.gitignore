@@ -29,6 +29,9 @@ results/**/*.json
 results/**/*.pkl
 !results/.gitkeep
 
+# Trained model artifacts (regeneratable; copy from the training box to predict elsewhere)
+artifacts/
+
 # IDE
 .idea/
 .vscode/

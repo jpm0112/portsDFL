@@ -1,0 +1,25 @@
+# Slim conda env for training the PREDICTION models on ASAX — no DFL/optimizer
+# (Gurobi/pyomo/pyepo) deps, so it builds fast and needs no solver license.
+# Create once on the ASAX login node:
+#     conda env create -f hpc/environment-predict.yml
+# Matches the ASAX module stack (anaconda/3-2025.12 + cuda/11.8.0).
+name: portsdfl-predict
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - numpy
+  - pandas
+  - scikit-learn>=1.5
+  - joblib
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu118
+      - torch==2.7.1+cu118
+      - xgboost>=2.0
+      - lightgbm>=4.3
+      - optuna>=3.6
+      - category-encoders>=2.6
+      - pytabkit>=1.4
+      - tabm>=0.0.3
+      - pytorch_tabular>=1.1

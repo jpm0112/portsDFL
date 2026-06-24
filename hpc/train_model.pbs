@@ -1,0 +1,10 @@
+#!/bin/bash
+# Generic per-model ASAX training job. $MODEL is injected via `qsub -v MODEL=<name>`.
+# Submitted by hpc/submit_batch.sh — do not run directly.
+source "${PBS_O_WORKDIR:-$HOME/portsDFL}/hpc/_job_setup.sh"
+
+: "${MODEL:?MODEL must be set via qsub -v MODEL=<name>}"
+echo "[$(date)] Training '$MODEL' on $(hostname) | data=$PORTSDFL_DATA"
+
+# train_all.py self-bootstraps src/ onto sys.path, so no editable install is needed.
+exec python prediction_models/scripts/train_all.py --models "$MODEL"

@@ -1,8 +1,9 @@
 """Aggregate per-model results into a single comparison table.
 
-Reads CV summary CSVs from results/{baselines,linear,realmlp,tabm,node}/
-and prints a unified ranking table. Also pulls the real-DBAP demo outcome
-(predictive + decision-quality metrics) if present.
+Reads CV summary CSVs from results/<model>/ for the baselines plus every
+registered model (trees: xgb/lgbm/rf; neural: linear/realmlp/tabm/node) and prints
+a unified ranking table. Also pulls the real-DBAP demo outcome (predictive +
+decision-quality metrics) if present.
 
 Usage:
     python scripts/compare.py
@@ -10,6 +11,7 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -18,8 +20,7 @@ import pandas as pd
 # Make the package importable when running the script directly.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from ports_dfl.config import RESULTS_DIR
-
+from ports_dfl.config import PROJECT_ROOT, RESULTS_DIR  # noqa: E402
 
 # Filenames to try in priority order; use whichever exists first for a model.
 _SUMMARY_CANDIDATES = ("cv_summary.csv", "cv_summary_tuned.csv", "cv_summary_stock.csv")
@@ -33,10 +34,10 @@ def _read_summary(model: str) -> dict | None:
             df = pd.read_csv(path, index_col=0)
             # Only use this file if it has the summary rows we expect.
             if "mean" in df.index and "std" in df.index:
-                # NOTE: the label-cleaning `.strip('_.csv')` is fragile for the
-                # "stock" filename. See REVIEW.
+                # e.g. cv_summary_tuned.csv -> "tuned", cv_summary.csv -> "best".
+                tag = fname.removeprefix("cv_summary").removesuffix(".csv").strip("_") or "best"
                 return {
-                    "model": f"{model} ({fname.replace('cv_summary', '').strip('_.csv') or 'best'})",
+                    "model": f"{model} ({tag})",
                     "mae_mean": df.loc["mean", "mae"],
                     "mae_std": df.loc["std", "mae"],
                     "rmse_mean": df.loc["mean", "rmse"],
@@ -69,9 +70,27 @@ def _read_baseline_table() -> list[dict]:
     return rows
 
 
+def _build_manifest() -> None:
+    """Merge the per-model artifact fragments into one artifacts/manifest.json index."""
+    art_dir = PROJECT_ROOT / "artifacts"
+    fragments = sorted(art_dir.glob("*.meta.json"))
+    if not fragments:
+        return
+    models = {
+        meta["name"]: meta
+        for frag in fragments
+        for meta in [json.loads(frag.read_text(encoding="utf-8"))]
+    }
+    manifest = {"preprocessor": "preprocessor.pkl", "models": models}
+    (art_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    print(f"Wrote artifacts manifest: {art_dir / 'manifest.json'} ({len(models)} models)")
+
+
 def main() -> None:
     rows = _read_baseline_table()
-    for model in ["linear", "realmlp", "tabm", "node"]:
+    # Source of truth for model names is models/registry.py; listed literally here so
+    # this CSV-aggregation script needs no heavy ML imports (torch/xgboost/etc.).
+    for model in ["xgb", "lgbm", "rf", "linear", "realmlp", "tabm", "node"]:
         s = _read_summary(model)
         if s is not None:
             rows.append(s)
@@ -140,6 +159,8 @@ def main() -> None:
     out = RESULTS_DIR / "comparison.csv"
     df.to_csv(out, index=False)
     print(f"\nWritten unified comparison to {out}")
+
+    _build_manifest()
 
 
 if __name__ == "__main__":
