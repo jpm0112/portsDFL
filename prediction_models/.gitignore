@@ -32,6 +32,11 @@ results/**/*.pkl
 # Trained model artifacts (regeneratable; copy from the training box to predict elsewhere)
 artifacts/
 
+# Predictor-tool outputs (keep the sample templates)
+predictor/*.csv
+!predictor/sample_vessels.csv
+!predictor/sample_raw_vessels.csv
+
 # IDE
 .idea/
 .vscode/

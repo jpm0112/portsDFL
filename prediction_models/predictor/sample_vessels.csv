@@ -1,0 +1,6 @@
+Tipo nave (agrupado),TRG,Puerto origen,Puerto destino,Agencia,Sitio,Línea naviera,Servicio,Calado arribo,Calado diff,covid_era,atraque_hour_sin,atraque_hour_cos,atraque_dayofweek_sin,atraque_dayofweek_cos,atraque_month_sin,atraque_month_cos
+Vehicle Carrier,47053,ARICA,other_destinations,78610880-2 - INCHCAPE,Sitio 4/5,other_liners,CAR CARRIERS,7.85,0.45,pre,0.965926,-0.258819,0.433884,-0.900969,0.5,0.866025
+Passenger,66084,PUERTO MONTT,COQUIMBO,78610880-2 - INCHCAPE,Sitio 4/5,NON-LINER,NO SERVICE,7.05,0.0,pre,1.0,0.0,-0.974928,-0.222521,0.5,0.866025
+Vehicle Carrier,61321,MANTA,SANTOS - SP,82728500-5 - IAN TAYLOR,Sitio 4/5,WWO,WCSA,8.7,1.15,pre,-0.707107,0.707107,0.433884,-0.900969,0.5,0.866025
+Container,141635,LIRQUEN,ANGAMOS,96707720-8 - MSC,Sitio 1,MSC,Andes,12.7,-1.0,pre,-0.258819,-0.965926,0.974928,-0.222521,0.5,0.866025
+Container,39905,SANTOS - SP,CALLAO,82728500-5 - IAN TAYLOR,Sitio 2,ALIANCA,NEW ANDES,12.1,1.2,pre,-0.707107,0.707107,-0.433884,-0.900969,0.5,0.866025

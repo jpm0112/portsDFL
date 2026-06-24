@@ -75,34 +75,47 @@ def load_bundle(
     return preprocessor, loaded, metas
 
 
-def predict_csv(
-    input_csv: Path | str, artifacts_dir: Path | str, models: list[str] | None = None
+def predict_frame(
+    features: pd.DataFrame, artifacts_dir: Path | str, models: list[str] | None = None
 ) -> pd.DataFrame:
-    """Predict service time (hours) for every row of ``input_csv``, one column per model.
+    """Predict service time (hours) from a DataFrame that already holds the model features.
 
     Args:
-        input_csv: CSV containing at least the ``config.ALL_FEATURES`` columns.
+        features: DataFrame containing at least the ``config.ALL_FEATURES`` columns.
         artifacts_dir: directory of trained artifacts.
         models: subset of models to run; ``None`` runs all saved models.
 
     Returns:
-        DataFrame aligned to the input rows with one column per model plus an
+        DataFrame aligned to ``features`` with one column per model plus an
         ``ensemble_mean`` column. Predictions are clamped at 0 (service time can't
         be negative).
 
     Raises:
-        ValueError: if the input CSV is missing any required feature column.
+        ValueError: if any required feature column is missing.
     """
-    df = pd.read_csv(input_csv)
-    missing = [c for c in ALL_FEATURES if c not in df.columns]
+    missing = [c for c in ALL_FEATURES if c not in features.columns]
     if missing:
-        raise ValueError(f"Input CSV is missing required feature columns: {missing}")
+        raise ValueError(f"Input is missing required feature columns: {missing}")
 
     preprocessor, loaded, _ = load_bundle(artifacts_dir, models)
-    X = preprocessor.transform(df[ALL_FEATURES]).astype(np.float32)
+    X = preprocessor.transform(features[ALL_FEATURES]).astype(np.float32)
 
-    out = pd.DataFrame(index=df.index)
+    out = pd.DataFrame(index=features.index)
     for name, model in loaded.items():
         out[name] = np.clip(model.predict(X), a_min=0.0, a_max=None)
     out["ensemble_mean"] = out.mean(axis=1)
     return out
+
+
+def predict_csv(
+    input_csv: Path | str, artifacts_dir: Path | str, models: list[str] | None = None
+) -> pd.DataFrame:
+    """Predict service time (hours) for every row of ``input_csv`` (one column per model).
+
+    Thin wrapper over :func:`predict_frame`: reads the CSV (which must contain the
+    ``config.ALL_FEATURES`` columns) and predicts.
+
+    Raises:
+        ValueError: if the CSV is missing any required feature column.
+    """
+    return predict_frame(pd.read_csv(input_csv), artifacts_dir, models)
