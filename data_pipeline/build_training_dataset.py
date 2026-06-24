@@ -22,6 +22,9 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data"
 INPUT_FILE = os.path.join(DATA_DIR, "BBDD limpia(1).xlsx")
 SHEET_NAME = "Resume Naves Comerciales (4)"
 OUTPUT_FILE = os.path.join(DATA_DIR, "training_dataset.csv")
+# Label-revealing reference columns are written here, NOT into the training CSV,
+# so they can't be ingested as features by accident (see select_final_columns).
+REFERENCE_FILE = os.path.join(DATA_DIR, "training_dataset_reference.csv")
 
 # Column name mapping: Excel Spanish -> internal English.
 COLUMN_MAP = {
@@ -139,8 +142,13 @@ def clean_data(df):
     )
     n_quality = df["quality_flag"].sum()
 
-    # NOTE: NaN estadia_sitio_hours compares as False here, so un-computable
-    # berth stays are NOT dropped by this filter.
+    # Drop rows whose berth stay could not be computed (a NaT timestamp yields a
+    # NaN target). NaN compares as False in the masks below, so without an explicit
+    # drop these survive the filter and a single NaN later poisons the per-group
+    # running means in build_group_features.
+    mask_nan = df["estadia_sitio_hours"].isna()
+    n_nan = mask_nan.sum()
+
     mask_short = df["estadia_sitio_hours"] < 2
     n_short = mask_short.sum()
 
@@ -148,8 +156,9 @@ def clean_data(df):
     mask_extreme = df["estadia_sitio_hours"] > 500
     n_extreme = mask_extreme.sum()
 
-    df = df[~mask_short & ~mask_extreme].copy()
+    df = df[~mask_nan & ~mask_short & ~mask_extreme].copy()
 
+    print(f"  Removed {n_nan} records with un-computable berth stay (NaN target)")
     print(f"  Removed {n_short} records with berth stay < 2h")
     print(f"  Removed {n_extreme} records with berth stay > 500h")
     print(f"  Flagged {n_quality} records with dispatch < reception")
@@ -169,8 +178,15 @@ def build_direct_features(df):
     Input:  DataFrame with raw columns
     Output: DataFrame with engineered direct features
     """
-    # Vessel type grouping (unmapped types -> "Other")
-    df["vessel_type_group"] = df["vessel_type"].map(VESSEL_TYPE_GROUP).fillna("Other")
+    # Vessel type grouping: fail loud on a genuinely-new/misspelled type (matches
+    # build_clean_dataset.add_vessel_type_group) so it can't be silently mislabeled
+    # -- vessel_type_group is both a feature and a group-aggregate key.
+    unmapped = set(df["vessel_type"].dropna().unique()) - set(VESSEL_TYPE_GROUP)
+    if unmapped:
+        raise ValueError(f"Vessel types missing from VESSEL_TYPE_GROUP: {unmapped}")
+    # A genuinely-missing vessel type -> explicit UNKNOWN (consistent with the
+    # shipping_line / service_route handling below), not silently "Other".
+    df["vessel_type_group"] = df["vessel_type"].map(VESSEL_TYPE_GROUP).fillna("UNKNOWN")
 
     # Parse agency name: "RUT - NAME" -> "NAME"; fall back to the whole string.
     df["agency"] = df["agency_raw"].apply(
@@ -351,18 +367,25 @@ def add_split_column(df):
 
 def select_final_columns(df):
     """
-    Select and order the final columns for the output CSV.
+    Select and order the final columns, splitting features from label-revealing
+    reference columns.
 
     Groups columns into: targets, direct features, temporal, historical,
-    group-level, reference columns.
+    group-level, and reference columns. Reference columns are split into a "safe"
+    set (knowable at berthing time / metadata) that stays in the training table and
+    a "leaky" set (end-of-service timestamps and post-service durations, from which
+    the target can be reconstructed) that is returned separately so it never lands
+    in the training CSV.
 
     Input:  DataFrame with all computed columns
-    Output: DataFrame with only the final columns, ordered
+    Output: (training_df, reference_df), each with source columns renamed to
+            Spanish. Rejoin reference_df on [Cód. nave, 1era espía atraque].
     """
-    # Target variables
+    # The prediction target. estadia_sitio_hours (berth stay) is THE target;
+    # tiempo_en_puerto_hours (time in port) is a post-outcome duration, not a
+    # training target, so it goes to the reference file below.
     targets = [
         "estadia_sitio_hours",
-        "tiempo_en_puerto_hours",
     ]
 
     # Direct features
@@ -415,23 +438,37 @@ def select_final_columns(df):
         "terminal_avg_stay",
     ]
 
-    # Reference columns (not features)
-    reference = [
+    # Reference columns knowable at berthing time or plain metadata: safe to ship
+    # alongside the features.
+    reference_safe = [
         "arrival_datetime",
         "pilot_boarding_datetime",
         "first_mooring_datetime",
-        "last_unmooring_datetime",
-        "departure_datetime",
-        "espera_preatraque_hours",
         "quality_flag",
         "split",
     ]
 
-    all_columns = targets + direct + temporal + historical + group + reference
+    # Reference columns kept OUT of the training table: they either reconstruct the
+    # target (last_unmooring - first_mooring IS estadia_sitio) or are post-outcome
+    # quantities unusable as features (departure, espera_preatraque, and
+    # tiempo_en_puerto_hours -- the secondary "time in port" duration, which is NOT
+    # the training target). Written to REFERENCE_FILE so a naive "every column is a
+    # feature" loader can't pick them up; rejoin on the keys below.
+    reference_leaky = [
+        "tiempo_en_puerto_hours",
+        "last_unmooring_datetime",
+        "departure_datetime",
+        "espera_preatraque_hours",
+    ]
+    ref_keys = ["vessel_code", "first_mooring_datetime"]
+    reference_df = df[ref_keys + reference_leaky].copy()
+
+    all_columns = targets + direct + temporal + historical + group + reference_safe
     df = df[all_columns]
 
     # Restore original Spanish names for columns taken directly from source.
-    # Derived/computed columns keep their English names.
+    # Derived/computed columns keep their English names. (rename ignores any name
+    # not present, so the same map serves both frames.)
     spanish_rename = {
         "vessel_code": "Cód. nave",
         "vessel_name": "Nave",
@@ -451,7 +488,8 @@ def select_final_columns(df):
         "departure_datetime": "Zarpe",
     }
     df = df.rename(columns=spanish_rename)
-    return df
+    reference_df = reference_df.rename(columns=spanish_rename)
+    return df, reference_df
 
 
 def main():
@@ -496,14 +534,17 @@ def main():
 
     # Step 10: Select and save
     print("\nSelecting final columns...")
-    df = select_final_columns(df)
+    df, reference_df = select_final_columns(df)
 
     os.makedirs(DATA_DIR, exist_ok=True)
     # encoding="utf-8" keeps the Spanish accents (á, í, etc.) intact.
     df.to_csv(OUTPUT_FILE, index=False, encoding="utf-8")
+    reference_df.to_csv(REFERENCE_FILE, index=False, encoding="utf-8")
     print(f"\nSaved to {OUTPUT_FILE}")
     print(f"  Shape: {df.shape[0]} rows x {df.shape[1]} columns")
     print(f"  Size: {os.path.getsize(OUTPUT_FILE) / 1024:.0f} KB")
+    print(f"  Reference columns -> {REFERENCE_FILE} "
+          f"({reference_df.shape[1]} cols, label-revealing; kept out of training CSV)")
 
     # Quick verification
     print("\n" + "=" * 60)
@@ -513,8 +554,6 @@ def main():
           f"median={df['estadia_sitio_hours'].median():.1f}, "
           f"min={df['estadia_sitio_hours'].min():.1f}, "
           f"max={df['estadia_sitio_hours'].max():.1f}")
-    print(f"  tiempo_en_puerto     -> mean={df['tiempo_en_puerto_hours'].mean():.1f}, "
-          f"median={df['tiempo_en_puerto_hours'].median():.1f}")
     # Should equal the number of first-ever visits (no prior history to average).
     print(f"  First visits (NaN vessel_avg): "
           f"{df['vessel_avg_berth_stay'].isna().sum()}")

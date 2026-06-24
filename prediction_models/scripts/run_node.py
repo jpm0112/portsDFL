@@ -44,7 +44,9 @@ def _evaluate_best(best_params: dict, X, y, splits, max_epochs: int, out_dir: Pa
         X_train = pre.fit_transform(X_train_raw, y_train).astype(np.float32)
         X_val = pre.transform(X_val_raw).astype(np.float32)
 
-        model = NODE(input_dim=X_train.shape[1], max_epochs=max_epochs, **best_params)
+        # Distinct seed per fold so folds are independent draws, not identical reseeds.
+        model = NODE(input_dim=X_train.shape[1], max_epochs=max_epochs,
+                     seed=SEED + fold_idx, **best_params)
         model.fit(X_train, y_train, X_val, y_val)
         preds = model.predict(X_val)
         fold_metrics.append(all_metrics(y_val, preds))

@@ -23,7 +23,7 @@ from pytorch_tabular.models.common.layers.soft_trees import (
 )
 from pytorch_tabular.models.node.architecture_blocks import DenseODSTBlock
 
-from ports_dfl.config import DEVICE
+from ports_dfl.config import DEVICE, SEED
 from ports_dfl.models.base import BaseModel
 from ports_dfl.train.pto import TrainConfig, predict_pto, train_pto
 
@@ -103,6 +103,7 @@ class NODE(BaseModel):
         patience: int = 16,
         grad_clip: float = 1.0,
         use_amp: bool = False,
+        seed: int = SEED,
     ) -> None:
         self.input_dim = input_dim
         self.n_layers = n_layers
@@ -118,6 +119,7 @@ class NODE(BaseModel):
         self.patience = patience
         self.grad_clip = grad_clip
         self.use_amp = use_amp
+        self.seed = seed  # per-fold seed -> TrainConfig, so CV folds are independent draws
         self.module = self._build_module()
         self.train_result_ = None
 
@@ -143,6 +145,7 @@ class NODE(BaseModel):
             patience=self.patience,
             grad_clip=self.grad_clip,
             use_amp=self.use_amp,
+            seed=self.seed,
         )
 
     def fit(

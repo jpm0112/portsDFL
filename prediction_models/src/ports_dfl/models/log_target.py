@@ -5,8 +5,9 @@ typically improves both R² and MAPE substantially since:
 
     - the noise structure is closer to multiplicative than additive;
     - extreme tail values stop dominating the MSE gradient;
-    - the back-transform exp(x̂) is naturally non-negative, removing a
-      common source of nonsense predictions on short-stay vessels.
+    - the back-transform is clamped at 0, so predictions can never be
+      negative service times (a common source of nonsense on short-stay
+      vessels; exp(x̂) - offset can otherwise dip below 0 when offset > 0).
 
 Caveat: predictions are exponentiated before metric computation, so the
 metrics reported are still in target units (hours).
@@ -64,7 +65,10 @@ class LogTargetWrapper(BaseModel):
     def predict(self, X: np.ndarray) -> np.ndarray:
         log_preds = self.inner.predict(X)
         # Clip to [-10, 10] so exp() can't overflow to inf, then invert the +offset.
-        return np.exp(np.clip(log_preds, -10.0, 10.0)) - self.offset
+        preds = np.exp(np.clip(log_preds, -10.0, 10.0)) - self.offset
+        # exp(log_pred) - offset can be negative when log_pred < log(offset); clamp
+        # at 0 since a negative service time is invalid input to the BAP optimizer.
+        return np.clip(preds, 0.0, None)
 
     def save(self, path: Path | str) -> None:
         path = Path(path)

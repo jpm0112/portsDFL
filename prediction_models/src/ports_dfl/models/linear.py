@@ -11,7 +11,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from ports_dfl.config import DEVICE
+from ports_dfl.config import DEVICE, SEED
 from ports_dfl.models.base import BaseModel
 from ports_dfl.train.pto import TrainConfig, predict_pto, train_pto
 
@@ -49,6 +49,7 @@ class LinearRegressor(BaseModel):
         max_epochs: int = 200,
         patience: int = 20,
         grad_clip: float = 1.0,
+        seed: int = SEED,
     ) -> None:
         self.input_dim = input_dim
         self.lr = lr
@@ -57,6 +58,7 @@ class LinearRegressor(BaseModel):
         self.max_epochs = max_epochs
         self.patience = patience
         self.grad_clip = grad_clip
+        self.seed = seed  # per-fold seed -> TrainConfig, so CV folds are independent draws
         self.module = _LinearHead(input_dim)
         self.train_result_ = None  # populated by fit()
 
@@ -69,6 +71,7 @@ class LinearRegressor(BaseModel):
             max_epochs=self.max_epochs,
             patience=self.patience,
             grad_clip=self.grad_clip,
+            seed=self.seed,
         )
 
     def fit(

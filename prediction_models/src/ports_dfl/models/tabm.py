@@ -16,7 +16,7 @@ import torch
 import torch.nn as nn
 from tabm import TabM as TabMModule  # rename so our own class can also be called "TabM"
 
-from ports_dfl.config import DEVICE
+from ports_dfl.config import DEVICE, SEED
 from ports_dfl.models.base import BaseModel
 from ports_dfl.train.pto import TrainConfig, predict_pto, train_pto
 
@@ -77,6 +77,7 @@ class TabM(BaseModel):
         patience: int = 16,
         grad_clip: float = 1.0,
         use_amp: bool = True,
+        seed: int = SEED,
     ) -> None:
         self.input_dim = input_dim
         self.k_ensemble = k_ensemble
@@ -91,6 +92,7 @@ class TabM(BaseModel):
         self.patience = patience
         self.grad_clip = grad_clip
         self.use_amp = use_amp
+        self.seed = seed  # per-fold seed -> TrainConfig, so CV folds are independent draws
         # Name mapping into TabM's vocabulary: depth -> n_blocks, hidden_dim -> d_block.
         self.module = _TabMRegressor(
             input_dim=input_dim,
@@ -111,6 +113,7 @@ class TabM(BaseModel):
             patience=self.patience,
             grad_clip=self.grad_clip,
             use_amp=self.use_amp,
+            seed=self.seed,
         )
 
     def fit(

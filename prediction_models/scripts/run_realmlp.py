@@ -57,7 +57,9 @@ def _evaluate(name: str, model_kwargs: dict, X, y, splits, out_dir: Path) -> pd.
         X_train = pre.fit_transform(X_train_raw, y_train).astype(np.float32)
         X_val = pre.transform(X_val_raw).astype(np.float32)
 
-        model = RealMLP(input_dim=X_train.shape[1], **model_kwargs)
+        # Distinct seed per fold so folds are independent draws (merge overrides any
+        # random_state already in model_kwargs without a duplicate-kwarg error).
+        model = RealMLP(input_dim=X_train.shape[1], **{**model_kwargs, "random_state": SEED + fold_idx})
         model.fit(X_train, y_train, X_val, y_val)
         preds = model.predict(X_val)
         fold_metrics.append(all_metrics(y_val, preds))

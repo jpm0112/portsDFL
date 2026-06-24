@@ -133,16 +133,23 @@ def load_source():
 
 def filter_anomalies(df):
     """
-    Drop rows whose `Estadía sitio` is below MIN_BERTH_HOURS or above
-    MAX_BERTH_HOURS. The bounds are conservative and only remove records
-    that are unambiguously bad (aborted calls and a single 780h outlier).
+    Drop rows whose berth stay is below MIN_BERTH_HOURS or above MAX_BERTH_HOURS.
+    Berth stay is recomputed from the raw timestamps (last unmooring - first
+    mooring) so it matches build_training_dataset.compute_targets exactly, rather
+    than trusting the source `Estadía sitio` column (which could disagree). The
+    bounds are conservative and only remove records that are unambiguously bad
+    (aborted calls and a single 780h outlier).
 
-    Input:  DataFrame with `Estadía sitio` as Timedelta.
+    Input:  DataFrame with `1era espía atraque` and `Última espía desatraque`
+            as datetime-like.
     Output: Filtered DataFrame, same columns as the input.
     """
     n_before = len(df)
 
-    estadia_hours = df["Estadía sitio"].dt.total_seconds() / 3600
+    # Recompute from timestamps (canonical definition), not the source column.
+    estadia_hours = (
+        (df["Última espía desatraque"] - df["1era espía atraque"]).dt.total_seconds() / 3600
+    )
     mask_short = estadia_hours < MIN_BERTH_HOURS
     mask_extreme = estadia_hours > MAX_BERTH_HOURS
 
