@@ -131,3 +131,21 @@ def engineer(raw: pd.DataFrame) -> pd.DataFrame:
     out["atraque_month_sin"], out["atraque_month_cos"] = _cyclical(berthing.dt.month, 12)
 
     return out[list(ALL_FEATURES)]
+
+
+def unseen_values(features: pd.DataFrame, vocab: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Return, per categorical column, the engineered values not present in ``vocab``.
+
+    ``vocab`` maps a column to the values seen during training (saved as
+    ``artifacts/vocab.json`` by scripts/train_all.py). These are exactly the inputs that
+    fall back to the encoder's default at predict time (prior/average for target-encoded
+    columns, a neutral all-zeros for one-hot ``Sitio``), so the caller can report them.
+    """
+    flagged: dict[str, list[str]] = {}
+    for col, known in vocab.items():
+        if col not in features.columns:
+            continue
+        unknown = sorted(set(features[col].dropna().astype(str)) - set(map(str, known)))
+        if unknown:
+            flagged[col] = unknown
+    return flagged

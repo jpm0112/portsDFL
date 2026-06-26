@@ -34,6 +34,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from ports_dfl.config import (  # noqa: E402
     ALL_FEATURES,
+    HIGH_CARDINALITY_CATEGORICAL,
+    LOW_CARDINALITY_CATEGORICAL,
     N_FOLDS,
     OPTUNA_DB_DIR,
     PROJECT_ROOT,
@@ -161,6 +163,16 @@ def _atomic_dump(obj: object, dest: Path, tag: str) -> None:
     os.replace(tmp, dest)
 
 
+def _save_vocab(X: pd.DataFrame, artifacts_dir: Path, tag: str) -> None:
+    """Save the categorical vocabulary (values the encoders saw) so the predictor can warn
+    when an input value is unseen. Atomic write, like the shared preprocessor."""
+    cat_cols = [*LOW_CARDINALITY_CATEGORICAL, *HIGH_CARDINALITY_CATEGORICAL]
+    vocab = {c: sorted(X[c].dropna().astype(str).unique().tolist()) for c in cat_cols}
+    tmp = artifacts_dir / f".vocab.{tag}.tmp"
+    tmp.write_text(json.dumps(vocab, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, artifacts_dir / "vocab.json")
+
+
 def fit_full_and_save(
     spec: ModelSpec, name: str, best_params: dict, X: pd.DataFrame, y: pd.Series, artifacts_dir: Path
 ) -> Path:
@@ -181,6 +193,7 @@ def fit_full_and_save(
 
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     _atomic_dump(pre, artifacts_dir / "preprocessor.pkl", tag=name)
+    _save_vocab(X, artifacts_dir, tag=name)
     artifact = artifacts_dir / f"{name}.pkl"
     model.save(artifact)
     return artifact

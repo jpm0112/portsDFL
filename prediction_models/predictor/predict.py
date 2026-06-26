@@ -13,6 +13,7 @@ trained artifacts in ../artifacts. No retraining.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -22,7 +23,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "src"))  # prediction_models/src
 sys.path.insert(0, str(HERE))  # this folder, so `features` imports
 
-from features import engineer  # noqa: E402
+from features import engineer, unseen_values  # noqa: E402
 
 from ports_dfl.inference import predict_frame  # noqa: E402
 
@@ -40,6 +41,13 @@ def main() -> None:
 
     raw = pd.read_csv(args.input)
     features = engineer(raw)
+
+    # Warn about categorical values not seen in training (they fall back to a default).
+    vocab_path = args.artifacts / "vocab.json"
+    if vocab_path.exists():
+        for col, vals in unseen_values(features, json.loads(vocab_path.read_text("utf-8"))).items():
+            print(f"  ! {col}: {vals} not seen in training; using that field's overall average")
+
     models = [m.strip() for m in args.models.split(",")] if args.models else None
     preds = predict_frame(features, args.artifacts, models)
 

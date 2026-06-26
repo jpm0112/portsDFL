@@ -9,7 +9,7 @@ import pytest
 
 # The predictor tool lives in a sibling subdir (not a package); add it to the path.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "predictor"))
-from features import engineer  # noqa: E402
+from features import engineer, unseen_values  # noqa: E402
 
 from ports_dfl.config import ALL_FEATURES  # noqa: E402
 
@@ -85,3 +85,10 @@ def test_cyclical_encoding_matches_formula() -> None:
     out = engineer(_raw_row(berthing_datetime="2024-06-15 14:00"))
     assert out["atraque_hour_sin"].iloc[0] == pytest.approx(np.sin(2 * np.pi * 14 / 24))
     assert out["atraque_hour_cos"].iloc[0] == pytest.approx(np.cos(2 * np.pi * 14 / 24))
+
+
+def test_unseen_values_flags_only_unknowns() -> None:
+    feats = engineer(_raw_row(**{"Puerto origen": "MADE_UP_PORT"}))
+    vocab = {"Puerto origen": ["LIRQUEN", "CALLAO"], "Sitio": ["Sitio 1", "Sitio 2"]}
+    # Sitio 1 is in the vocab (not flagged); the made-up port is not.
+    assert unseen_values(feats, vocab) == {"Puerto origen": ["MADE_UP_PORT"]}
