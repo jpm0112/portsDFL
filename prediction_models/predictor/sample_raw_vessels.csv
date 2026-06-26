@@ -1,4 +1,0 @@
-Sitio,Tipo nave,arrival_datetime,berthing_datetime,Puerto origen,Puerto destino,Agencia,Línea naviera,Servicio,TRG,draft_arrival_bow,draft_arrival_stern,draft_departure_bow,draft_departure_stern
-Sitio 1,Contenedor,2024-06-15 08:30,2024-06-15 14:00,LIRQUEN,ANGAMOS,96707720-8 - MSC,MSC,Andes,141635,12.5,12.9,11.8,12.2
-Sitio 4/5,Autero,2024-07-02 22:00,2024-07-03 03:00,MANTA,SANTOS - SP,82728500-5 - IAN TAYLOR,WWO,WCSA,61321,8.6,8.8,7.5,7.6
-Sitio 2,Pasajeros,2025-01-10 06:00,2025-01-10 09:30,PUERTO MONTT,COQUIMBO,78610880-2 - INCHCAPE,,,66084,7.0,7.1,7.0,7.1

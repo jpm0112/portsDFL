@@ -1,92 +1,90 @@
 # Vessel service-time predictor
 
-A small self-contained tool: feed it a CSV of vessels and it returns each model's
-predicted **berth service time (hours)** plus an ensemble mean. It reuses the trained
-artifacts in `../artifacts` — no retraining, no optimizer/DFL involved.
+Feed it a CSV of **raw vessel data** and it returns each model's predicted **berth
+service time (hours)** plus an ensemble mean. It auto-engineers the model features from
+the raw fields and reuses the trained artifacts in `../artifacts` — no retraining, no
+optimizer/DFL involved. `predict.py` is the tool; `sample_vessels.csv` is the template.
 
 ## Run
 
 ```bash
-# from this folder, with the project env active (has torch/xgboost/lightgbm/etc.):
-python predict.py                                    # runs on the bundled sample
+conda activate portsdfl
+
+# Needs trained models in ../artifacts first (from scripts/train_all.py, e.g. on ASAX —
+# see ../../hpc/README.md). Then, from this folder:
+python predict.py                                    # runs on sample_vessels.csv
 python predict.py --input my_vessels.csv --output preds.csv
 python predict.py --input my_vessels.csv --models xgb,lgbm   # a subset of models
 ```
 
-Needs trained artifacts in `../artifacts` (produced by `scripts/train_all.py`, e.g. on
-ASAX — see `../../hpc/README.md`). Output `predictions.csv` = your input columns + one
-predicted-hours column per model + `ensemble_mean`.
+Output `predictions.csv` = your input rows + one predicted-hours column per model +
+`ensemble_mean`.
 
-## Raw-input mode (best-effort)
+## Input columns
 
-If you have *raw* vessel fields instead of the engineered columns, use
-`predict_from_raw.py` — it auto-derives the 17 features (see `sample_raw_vessels.csv`)
-and then predicts:
+One row per vessel — copy `sample_vessels.csv` and edit it. Categorical values are
+matched against the training data; an **unlisted value still works**, it just falls back
+to that field's overall average (so the closed lists below matter most for `Sitio`,
+`Tipo nave`, and `Agencia`).
 
-```bash
-python predict_from_raw.py                                   # runs on sample_raw_vessels.csv
-python predict_from_raw.py --input my_raw_vessels.csv --output preds.csv
-```
+| Column | What to put |
+|---|---|
+| `Sitio` | Berth — one of: `C1`, `C2`, `Sitio 1`, `Sitio 2`, `Sitio 3`, `Sitio 4/5`, `Sitio 8`, `Sitio 9` |
+| `Tipo nave` | Raw vessel type — see the full list below |
+| `arrival_datetime` | When the vessel arrived, `YYYY-MM-DD HH:MM` (e.g. `2025-01-10 06:00`) |
+| `berthing_datetime` | First mooring / berthing time, same format |
+| `Puerto origen` | Origin port — examples below |
+| `Puerto destino` | Destination port — examples below |
+| `Agencia` | Agency as raw `RUT - NAME` — see the full list below |
+| `Línea naviera` | Shipping line — examples below; leave blank → `NON-LINER` |
+| `Servicio` | Service/route — examples below; leave blank → `NO SERVICE` |
+| `TRG` | Gross tonnage, a number (data range ~500 – 155,000) |
+| `draft_arrival_bow`, `draft_arrival_stern` | Arrival draft in metres, bow & stern (~2.5 – 14.6) |
+| `draft_departure_bow`, `draft_departure_stern` | Departure draft in metres (same range). **Optional** — omit and `Calado diff` is set to 0 |
 
-Required raw columns: `Sitio`, `Tipo nave` (raw type, e.g. `Contenedor`),
-`arrival_datetime`, `berthing_datetime` (first mooring), `Puerto origen`,
-`Puerto destino`, `Agencia` (raw `RUT - NAME`), `Línea naviera`, `Servicio`, `TRG`,
-`draft_arrival_bow`, `draft_arrival_stern`. Optional: `draft_departure_bow` +
-`draft_departure_stern` (for `Calado diff`; omitted → `Calado diff = 0`).
+### `Tipo nave` — valid raw types (grouped by what the model sees)
 
-⚠️ Best-effort: `covid_era` / `Calado diff` use the reverse-engineered logic below, and
-rare ports/lines that the training data bucketed (`other_destinations` / `other_liners`)
-can't be reproduced, so such values fall back to the model's prior. For faithful inputs,
-engineer the features yourself and use `predict.py`.
+- **Container:** `Contenedor`
+- **Dry Bulk:** `Carga Seca Granel`, `Mineral/Granel/Petrolero`
+- **Vehicle Carrier:** `Autero`, `Autotrasbordo`
+- **Liquid Bulk:** `Transporte Quimico`, `Transporte Liquido`, `Transporte de Asfalto`, `Petrolero`
+- **General Cargo:** `Tradicional`, `Carga de Proyecto`, `Chipero`, `Refrigerado`, `Otros`
+- **Passenger:** `Pasajeros`
+- **Other:** `Nave Armada`
 
-## Input format (faithful mode)
+An unlisted vessel type raises an error rather than guessing.
 
-`sample_vessels.csv` is a ready-to-edit template (5 real rows) for `predict.py`. Replace
-the values with your vessels; keep the column names. The 17 columns:
+### `Agencia` — the agencies in the data (use the exact string)
 
-**Categoricals** — provide the value as it appears in the data (rare values are bucketed,
-e.g. `other_destinations`, `other_liners`; an unseen value still works but falls back to
-a sensible average):
+`80992000-3 - ULTRAMAR` · `82728500-5 - IAN TAYLOR` · `96566940-k - AGUNSA` ·
+`80925100-4 - SOMARCO` · `96707720-8 - MSC` · `78986820-4 - B&M` · `80010900-0 - AGENTAL` ·
+`78610880-2 - INCHCAPE` · `76902117-5 - MTA` · `91256000-7 - A.J.BROOM` · `other_agencies`
 
-| Column | What | Notes |
-|---|---|---|
-| `Sitio` | berth label | e.g. `Sitio 1`, `Sitio 4/5` |
-| `Tipo nave (agrupado)` | vessel type group | one of: Container, Dry Bulk, Vehicle Carrier, Liquid Bulk, General Cargo, Passenger, Other |
-| `Puerto origen` / `Puerto destino` | port names | rare ports appear as `other_destinations` |
-| `Agencia` | agency, **raw** `RUT - NAME` | kept as-is, e.g. `78610880-2 - INCHCAPE` |
-| `Línea naviera` | shipping line | rare → `other_liners`; missing → `NON-LINER` |
-| `Servicio` | service/route | missing → `NO SERVICE` |
-| `covid_era` | `pre` / `during` / `post` | see formula below |
+### Ports / lines / services — common values (any value accepted; unknown → average)
 
-**Numerics** — if you have *raw* vessel data, compute these (formulas verified against the
-training data):
+- **`Puerto origen`** (41 in the data): `CALLAO`, `MEJILLONES`, `LIRQUEN`, `IQUIQUE`,
+  `SAN LORENZO`, `QUINTERO`, `ANTOFAGASTA`, `ARICA`, `ROSARIO`, `SANTOS - SP`,
+  `RIO GRANDE - RS`, … or `other_origins` for a rare one.
+- **`Puerto destino`** (53): `CALLAO`, `SAN VICENTE`, `HONG KONG`, `CORONEL`, `BALBOA`,
+  `MEJILLONES`, `SAN ANTONIO - CL`, `MANZANILLO - MX`, `PUNTA ARENAS`, `LIRQUEN`, `ULSAN`,
+  … or `other_destinations`.
+- **`Línea naviera`** (24): `MAERSK LINE`, `HAPAG-LLOYD CHILE SPA`, `MSC`, `COSCO GROUP`,
+  `TRANSMARES`, `CMA CGM`, `EVERGREEN`, `HYUNDAI GLOVIS INC.`, `ULTRAGAS`, `NYK`, `ZIM`,
+  … or `NON-LINER`.
+- **`Servicio`** (35): `CAR CARRIERS`, `SERVICIO CONOSUR / ABAC`, `Eurosal`, `WSA3`,
+  `699/ AC3`, `Andes`, `84Q ATACAMA FEEDER`, `U4Gabac`, `WSA`, `CABOTAJE SUR`, `CABOTAJE`,
+  … or `NO SERVICE`.
 
-```
-TRG            = gross tonnage (as-is)
-Calado arribo  = (arrival bow draft + arrival stern draft) / 2
-Calado diff    = Calado arribo  -  (departure bow draft + departure stern draft) / 2
+## Caveats
 
-covid_era      = "pre"    if arrival_date <  2020-03-11
-                 "during" if arrival_date <  2023-05-05
-                 "post"   otherwise
+The exact training pipeline for two features isn't in the repo, so they're reverse-engineered:
 
-# from the berthing (first-mooring) datetime t:
-hour  = t.hour            # 0..23     atraque_hour_sin = sin(2*pi*hour/24),  _cos = cos(2*pi*hour/24)
-dow   = t.weekday         # Mon=0..6  atraque_dayofweek_sin = sin(2*pi*dow/7),   _cos = cos(2*pi*dow/7)
-month = t.month           # 1..12     atraque_month_sin = sin(2*pi*month/12),    _cos = cos(2*pi*month/12)
-```
+- **`covid_era`** is derived from `arrival_datetime` with approximate cutoffs (`pre` if
+  before 2020-03-11, `during` if before 2023-05-05, else `post`). Negligible — any recent
+  vessel is `post`.
+- **`Calado diff`** = arrival − departure draft, so it needs the departure drafts (known
+  only after the call). Omit them for a not-yet-departed vessel and it defaults to 0; it's
+  one of 17 features, so a rough value mostly affects the tail of the estimate.
 
-## Caveats (read before trusting `covid_era` / `Calado diff`)
-
-The exact feature pipeline that built the training CSV is **not in the repo**, so two
-columns are reverse-engineered:
-
-- **`covid_era`** cutoff dates are approximate (the boundaries match the data ~99.8%).
-  Negligible in practice — any present-day vessel is just `post`.
-- **`Calado diff`** = arrival minus departure draft, so it needs the **departure** drafts,
-  which are only known *after* the call. For a vessel that hasn't left yet you can't
-  compute it exactly — set it to `0` (or a typical value) if unknown; it's one of 17
-  features, so a rough value mostly affects the tail of the estimate.
-
-Everything else (the categoricals, `TRG`, `Calado arribo`, and all six `atraque_*` cyclical
-encodings) reproduces the training features exactly.
+Everything else (the categoricals, `TRG`, arrival draft, and the six cyclical date
+encodings) is reproduced exactly.
