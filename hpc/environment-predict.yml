@@ -13,6 +13,7 @@ dependencies:
   - pandas
   - scikit-learn>=1.5
   - joblib
+  - requests          # pytorch_tabular imports it but doesn't declare it as a hard dep
   - pip:
       - --extra-index-url https://download.pytorch.org/whl/cu118
       - torch==2.7.1+cu118
