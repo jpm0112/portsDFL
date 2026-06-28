@@ -48,8 +48,10 @@ python prediction_models/scripts/predict.py --input vessels.csv --output preds.c
 
 ## Tuning knobs
 
-- **Tuning budget** — `train_all.py` uses 40 trials for trees, 20 for neural. Edit
-  the `RESOURCES` walltimes in `submit_batch.sh` if you change these.
+- **Tuning budget** — `train_all.py` defaults to 100 trials for trees, 40 for neural
+  (the "thorough" setting). Override per run with `--trials-tree N --trials-neural N`;
+  the PBS job passes none, so it uses these defaults. Edit the `RESOURCES` walltimes in
+  `submit_batch.sh` if you change them.
 - **CPU vs GPU queue** — tree jobs default to `-q gpu` (so a fresh checkout runs
   first try) but don't use the GPU. Once you confirm the ASAX CPU-queue name, set
   the tree rows in `submit_batch.sh` to it with `ngpus 0` to free the GPU.

@@ -252,8 +252,8 @@ def _resolve_names(arg: str) -> list[str]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train + tune + persist models.")
     parser.add_argument("--models", default="all", help="comma-separated names or 'all'")
-    parser.add_argument("--trials-tree", type=int, default=40)
-    parser.add_argument("--trials-neural", type=int, default=20)
+    parser.add_argument("--trials-tree", type=int, default=100)
+    parser.add_argument("--trials-neural", type=int, default=40)
     parser.add_argument(
         "--smoke", action="store_true", help=f"tiny run ({SMOKE_TRIALS} trials) to test the pipeline"
     )

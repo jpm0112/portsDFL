@@ -18,14 +18,17 @@ EMAIL="${ASAX_EMAIL:-}"  # export ASAX_EMAIL to get job-completion mail
 # ponytail: trees are CPU-bound (n_jobs=-1) but default to the gpu queue so a fresh
 # checkout runs first try. Once you confirm the ASAX CPU-queue name, switch the tree
 # rows' queue to it (and ngpus 0) so a tree job stops idling a GPU.
+# Walltimes are generous ceilings (over-requesting only costs queue wait; a job killed
+# at the limit wastes the whole run). Sized for the "thorough" budget: 100 tree trials /
+# 40 neural. If the gpu queue rejects a walltime as too long, check its cap (qstat -Q) and trim.
 declare -A RESOURCES=(
-  [xgb]="gpu 02:00:00 8 32gb 1"
-  [lgbm]="gpu 02:00:00 8 32gb 1"
-  [rf]="gpu 03:00:00 8 32gb 1"
-  [linear]="gpu 02:00:00 8 32gb 1"
-  [realmlp]="gpu 06:00:00 8 48gb 1"
-  [tabm]="gpu 06:00:00 8 48gb 1"
-  [node]="gpu 08:00:00 8 48gb 1"
+  [xgb]="gpu 03:00:00 8 32gb 1"
+  [lgbm]="gpu 03:00:00 8 32gb 1"
+  [rf]="gpu 04:00:00 8 32gb 1"
+  [linear]="gpu 04:00:00 8 32gb 1"
+  [realmlp]="gpu 12:00:00 8 48gb 1"
+  [tabm]="gpu 12:00:00 8 48gb 1"
+  [node]="gpu 16:00:00 8 48gb 1"
 )
 
 DRY_RUN=0
