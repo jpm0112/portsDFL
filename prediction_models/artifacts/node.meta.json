@@ -1,0 +1,63 @@
+{
+  "name": "node",
+  "kind": "neural",
+  "artifact": "node.pkl",
+  "preprocessor": "preprocessor.pkl",
+  "n_trials": 40,
+  "seed": 42,
+  "best_params": {
+    "n_layers": 2,
+    "n_trees": 128,
+    "tree_depth": 6,
+    "choice_function": "sparsemax",
+    "lr": 0.0029704666855166744,
+    "weight_decay": 6.639727368541646e-06
+  },
+  "cv": {
+    "mae": [
+      11.970860857352662,
+      0.2073015625001081
+    ],
+    "rmse": [
+      18.622043772236545,
+      0.7558447769197068
+    ],
+    "r2": [
+      0.5906304819174415,
+      0.02676688217374198
+    ],
+    "mape": [
+      0.38860882326089863,
+      0.02044113521313988
+    ]
+  },
+  "features": [
+    "Sitio",
+    "Tipo nave (agrupado)",
+    "covid_era",
+    "Puerto origen",
+    "Puerto destino",
+    "Servicio",
+    "L\u00ednea naviera",
+    "Agencia",
+    "TRG",
+    "Calado arribo",
+    "Calado diff",
+    "atraque_hour_sin",
+    "atraque_hour_cos",
+    "atraque_dayofweek_sin",
+    "atraque_dayofweek_cos",
+    "atraque_month_sin",
+    "atraque_month_cos"
+  ],
+  "target": "service_time_hours",
+  "units": "hours",
+  "lib_versions": {
+    "xgboost": "3.2.0",
+    "lightgbm": "4.6.0",
+    "scikit-learn": "1.9.0",
+    "torch": "2.7.1+cu118",
+    "optuna": "4.9.0",
+    "category-encoders": "2.9.0"
+  }
+}

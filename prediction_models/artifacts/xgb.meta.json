@@ -1,0 +1,65 @@
+{
+  "name": "xgb",
+  "kind": "tree",
+  "artifact": "xgb.pkl",
+  "preprocessor": "preprocessor.pkl",
+  "n_trials": 100,
+  "seed": 42,
+  "best_params": {
+    "learning_rate": 0.0031576750339684925,
+    "max_depth": 10,
+    "min_child_weight": 13.572864586192024,
+    "subsample": 0.7231438782369801,
+    "colsample_bytree": 0.5389361139914841,
+    "reg_lambda": 0.035491882918287185,
+    "reg_alpha": 0.0062149133137044885,
+    "gamma": 0.0027172492196518923
+  },
+  "cv": {
+    "mae": [
+      11.740451807788876,
+      0.20182456378318878
+    ],
+    "rmse": [
+      18.329308466808456,
+      0.6673020591433059
+    ],
+    "r2": [
+      0.6033965788219238,
+      0.023807070106063262
+    ],
+    "mape": [
+      0.39946052775421387,
+      0.02352788465985881
+    ]
+  },
+  "features": [
+    "Sitio",
+    "Tipo nave (agrupado)",
+    "covid_era",
+    "Puerto origen",
+    "Puerto destino",
+    "Servicio",
+    "L\u00ednea naviera",
+    "Agencia",
+    "TRG",
+    "Calado arribo",
+    "Calado diff",
+    "atraque_hour_sin",
+    "atraque_hour_cos",
+    "atraque_dayofweek_sin",
+    "atraque_dayofweek_cos",
+    "atraque_month_sin",
+    "atraque_month_cos"
+  ],
+  "target": "service_time_hours",
+  "units": "hours",
+  "lib_versions": {
+    "xgboost": "3.2.0",
+    "lightgbm": "4.6.0",
+    "scikit-learn": "1.9.0",
+    "torch": "2.7.1+cu118",
+    "optuna": "4.9.0",
+    "category-encoders": "2.9.0"
+  }
+}

@@ -1,0 +1,59 @@
+
+The following have been reloaded with a version change:
+  1) cuda/12.6.0_rocky9 => cuda/11.8.0       4) mpc/1.1.0-mheibzt => mpc/1.3.1
+  2) gcc/11.3.0-o2cd4vz => gcc/9.5.0_all     5) mpfr/3.1.6-3ojkize => mpfr/4.2.0
+  3) gmp/6.2.1-sh44noy => gmp/6.2.1
+
+[Sun Jun 28 12:43:02 CDT 2026] Training 'linear' on asaxg005 | data=/home/aubjpm001/portsDFL/data/training_dataset.csv
+2026-06-28 12:43:07,345 INFO Loading dataset...
+2026-06-28 12:43:07,374 INFO rows=5589 folds=5 models=['linear']
+2026-06-28 12:43:07,378 INFO === linear (neural, 40 trials) ===
+[I 2026-06-28 12:43:07,917] A new study created in RDB with name: linear
+[I 2026-06-28 12:43:36,616] Trial 0 finished with value: 15.53799057022817 and parameters: {'lr': 0.0013292918943162175, 'weight_decay': 0.566984951147885, 'batch_size': 128}. Best is trial 0 with value: 15.53799057022817.
+[I 2026-06-28 12:44:28,082] Trial 1 finished with value: 15.71022834287854 and parameters: {'lr': 0.00029375384576328325, 'weight_decay': 1.951722464144947e-05, 'batch_size': 128}. Best is trial 0 with value: 15.53799057022817.
+[I 2026-06-28 12:45:03,131] Trial 2 finished with value: 17.336730932282386 and parameters: {'lr': 0.00011527987128232407, 'weight_decay': 0.7072114131472232, 'batch_size': 128}. Best is trial 0 with value: 15.53799057022817.
+[I 2026-06-28 12:45:54,808] Trial 3 finished with value: 15.54494297222808 and parameters: {'lr': 0.0003549878832196505, 'weight_decay': 0.00033205591037519585, 'batch_size': 128}. Best is trial 0 with value: 15.53799057022817.
+[I 2026-06-28 12:46:11,688] Trial 4 finished with value: 14.8267684116107 and parameters: {'lr': 0.006847920095574782, 'weight_decay': 4.98275235707645e-05, 'batch_size': 512}. Best is trial 4 with value: 14.8267684116107.
+[I 2026-06-28 12:46:32,703] Trial 5 finished with value: 14.337884584658081 and parameters: {'lr': 0.0226739865237804, 'weight_decay': 9.962513222055098e-05, 'batch_size': 256}. Best is trial 5 with value: 14.337884584658081.
+[I 2026-06-28 12:46:48,497] Trial 6 finished with value: 14.850200563653072 and parameters: {'lr': 0.006647135865318031, 'weight_decay': 7.122305833333864e-05, 'batch_size': 512}. Best is trial 5 with value: 14.337884584658081.
+[I 2026-06-28 12:47:06,799] Trial 7 finished with value: 14.332753173196588 and parameters: {'lr': 0.026619018884890575, 'weight_decay': 0.0003334792728637581, 'batch_size': 256}. Best is trial 7 with value: 14.332753173196588.
+[I 2026-06-28 12:47:32,268] Trial 8 finished with value: 17.127255495701405 and parameters: {'lr': 0.00023233503515390126, 'weight_decay': 0.0029914693021302154, 'batch_size': 256}. Best is trial 7 with value: 14.332753173196588.
+[I 2026-06-28 12:47:54,919] Trial 9 finished with value: 14.535489267503404 and parameters: {'lr': 0.009717775305059635, 'weight_decay': 0.00036187233309596217, 'batch_size': 256}. Best is trial 7 with value: 14.332753173196588.
+[I 2026-06-28 12:48:06,784] Trial 10 finished with value: 14.345852815703187 and parameters: {'lr': 0.08070967983668642, 'weight_decay': 0.03157730410543593, 'batch_size': 256}. Best is trial 7 with value: 14.332753173196588.
+[I 2026-06-28 12:48:20,407] Trial 11 finished with value: 14.286374193694574 and parameters: {'lr': 0.04856433063708412, 'weight_decay': 0.0016992939024632948, 'batch_size': 256}. Best is trial 11 with value: 14.286374193694574.
+[I 2026-06-28 12:48:34,993] Trial 12 finished with value: 14.243629113273329 and parameters: {'lr': 0.08911220293590609, 'weight_decay': 0.0053760519423425865, 'batch_size': 256}. Best is trial 12 with value: 14.243629113273329.
+[I 2026-06-28 12:48:45,813] Trial 13 finished with value: 14.232253886000748 and parameters: {'lr': 0.09840613095376856, 'weight_decay': 0.009568463876568583, 'batch_size': 256}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:48:57,628] Trial 14 finished with value: 14.320511147553214 and parameters: {'lr': 0.08413576394132179, 'weight_decay': 0.02958699692427412, 'batch_size': 256}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:49:16,624] Trial 15 finished with value: 14.381010282132731 and parameters: {'lr': 0.022815201702138285, 'weight_decay': 0.016839550740899885, 'batch_size': 256}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:49:30,934] Trial 16 finished with value: 14.371459894945053 and parameters: {'lr': 0.0455940723902149, 'weight_decay': 0.005756138040228312, 'batch_size': 512}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:49:39,685] Trial 17 finished with value: 14.604867252698366 and parameters: {'lr': 0.09952920431194724, 'weight_decay': 0.1127073528564874, 'batch_size': 256}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:50:04,498] Trial 18 finished with value: 14.92888149249851 and parameters: {'lr': 0.0031439091922537527, 'weight_decay': 0.09450226249320588, 'batch_size': 256}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:50:22,552] Trial 19 finished with value: 14.62629954918676 and parameters: {'lr': 0.013675191184068168, 'weight_decay': 0.0011566681306271777, 'batch_size': 512}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:50:41,408] Trial 20 finished with value: 14.277053073287437 and parameters: {'lr': 0.041220124827603094, 'weight_decay': 0.0074016191139766215, 'batch_size': 256}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:50:58,921] Trial 21 finished with value: 14.333248976823004 and parameters: {'lr': 0.043154663577148596, 'weight_decay': 0.009632811250753468, 'batch_size': 256}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:51:15,172] Trial 22 finished with value: 14.27864260508 and parameters: {'lr': 0.0454032861285075, 'weight_decay': 0.003855342561505958, 'batch_size': 256}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:51:25,968] Trial 23 finished with value: 14.53445713056802 and parameters: {'lr': 0.09885662281959734, 'weight_decay': 0.07998499930408308, 'batch_size': 256}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:51:53,207] Trial 24 finished with value: 14.431809643577813 and parameters: {'lr': 0.014604580824956259, 'weight_decay': 0.0009997778181293293, 'batch_size': 256}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:52:13,641] Trial 25 finished with value: 14.310213611287372 and parameters: {'lr': 0.03334618911678661, 'weight_decay': 0.009257081935802654, 'batch_size': 256}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:52:29,390] Trial 26 finished with value: 14.325488854009109 and parameters: {'lr': 0.05703194004629713, 'weight_decay': 0.03435511160956408, 'batch_size': 256}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:52:50,056] Trial 27 finished with value: 14.460317898994585 and parameters: {'lr': 0.016172872688941013, 'weight_decay': 0.013216198806491653, 'batch_size': 256}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:53:10,171] Trial 28 finished with value: 14.25374525868124 and parameters: {'lr': 0.058914393466418476, 'weight_decay': 0.0025379604464945446, 'batch_size': 128}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:53:48,261] Trial 29 finished with value: 14.909250183604092 and parameters: {'lr': 0.0016924476373886576, 'weight_decay': 0.002449789112507001, 'batch_size': 128}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:54:00,442] Trial 30 finished with value: 14.966481709418343 and parameters: {'lr': 0.06988266276553753, 'weight_decay': 0.3732089638131502, 'batch_size': 128}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:54:24,242] Trial 31 finished with value: 14.26740395338127 and parameters: {'lr': 0.03517187915437093, 'weight_decay': 0.0007376876258186209, 'batch_size': 128}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:54:50,781] Trial 32 finished with value: 14.25065549850422 and parameters: {'lr': 0.030668406055995773, 'weight_decay': 0.0008719576992907405, 'batch_size': 128}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:55:07,394] Trial 33 finished with value: 14.24483456476664 and parameters: {'lr': 0.06398221560505693, 'weight_decay': 0.00019210324227487489, 'batch_size': 128}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:55:35,382] Trial 34 finished with value: 14.311296520575823 and parameters: {'lr': 0.022335086952610883, 'weight_decay': 0.0001697803388148049, 'batch_size': 128}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:55:53,421] Trial 35 finished with value: 14.291574860428792 and parameters: {'lr': 0.06308294659240088, 'weight_decay': 2.2883586384637818e-05, 'batch_size': 128}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:56:17,231] Trial 36 finished with value: 14.272642240180875 and parameters: {'lr': 0.02971019355824049, 'weight_decay': 0.000502829538293123, 'batch_size': 128}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:56:53,600] Trial 37 finished with value: 14.440732842077944 and parameters: {'lr': 0.007591683662924776, 'weight_decay': 0.00014177476129349436, 'batch_size': 128}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:57:24,492] Trial 38 finished with value: 14.317301574844544 and parameters: {'lr': 0.018150865181977352, 'weight_decay': 2.3484059372388923e-05, 'batch_size': 128}. Best is trial 13 with value: 14.232253886000748.
+[I 2026-06-28 12:57:47,435] Trial 39 finished with value: 14.956609216415018 and parameters: {'lr': 0.003822330053088234, 'weight_decay': 4.1887747062538886e-05, 'batch_size': 512}. Best is trial 13 with value: 14.232253886000748.
+2026-06-28 12:57:47,464 INFO [linear] best trial #13  MAE=14.232h
+2026-06-28 12:57:51,380 INFO [linear] fold 1/5  MAE=14.07h
+2026-06-28 12:57:53,405 INFO [linear] fold 2/5  MAE=14.22h
+2026-06-28 12:57:55,890 INFO [linear] fold 3/5  MAE=14.64h
+2026-06-28 12:57:58,415 INFO [linear] fold 4/5  MAE=14.20h
+2026-06-28 12:58:01,759 INFO [linear] fold 5/5  MAE=14.22h
+2026-06-28 12:58:03,528 INFO [linear] saved -> /home/aubjpm001/portsDFL/prediction_models/artifacts/linear.pkl  (CV MAE 14.268 h)
+2026-06-28 12:58:03,528 INFO Done. Artifacts in /home/aubjpm001/portsDFL/prediction_models/artifacts ; run scripts/compare.py for the leaderboard.

@@ -1,0 +1,8 @@
+{
+  "n_layers": 2,
+  "n_trees": 128,
+  "tree_depth": 6,
+  "choice_function": "sparsemax",
+  "lr": 0.0029704666855166744,
+  "weight_decay": 6.639727368541646e-06
+}
