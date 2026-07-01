@@ -6,7 +6,7 @@ exact: vessel-type grouping is copied verbatim from
 draft; the six ``atraque_*`` cyclical encodings were verified against the training
 data; ``Agencia`` is kept RAW (``"RUT - NAME"``) exactly as the models saw it.
 
-Two features are approximate (see ../predictor/README.md):
+Two features are approximate (see README.txt):
   - ``covid_era`` cutoff dates are reverse-engineered (negligible; recent vessels = "post").
   - ``Calado diff`` = arrival - departure draft, so it needs the DEPARTURE drafts
     (known only after the call). Omit them and it defaults to 0.

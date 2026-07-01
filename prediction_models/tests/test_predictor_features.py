@@ -1,4 +1,4 @@
-"""Tests for the raw->feature engineering in portable_predictor/features.py."""
+"""Tests for the raw->feature engineering in predictor/features.py."""
 
 import sys
 from pathlib import Path
@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 # The predictor tool lives in a sibling subdir (not a package); add it to the path.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "portable_predictor"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "predictor"))
 from features import engineer, unseen_values  # noqa: E402
 
 from ports_dfl.config import ALL_FEATURES  # noqa: E402
