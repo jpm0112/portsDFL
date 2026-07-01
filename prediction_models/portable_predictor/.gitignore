@@ -1,0 +1,5 @@
+# The bundle is assembled/shipped locally; keep heavy + generated files out of git.
+.venv/
+artifacts/
+*_predictions.csv
+predictions.csv
