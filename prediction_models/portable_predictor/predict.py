@@ -25,12 +25,18 @@ from columns import ALL_FEATURES
 from features import engineer, unseen_values
 
 HERE = Path(__file__).resolve().parent
-ARTIFACTS = HERE / "artifacts"
+# ponytail: prefer models bundled in this folder (the zip-and-hand-off copy); when the
+# folder is run from inside a full repo clone, fall back to the shared ../artifacts that
+# git already tracks -- so `git clone` + run works without committing a 90 MB duplicate.
+_LOCAL_ARTIFACTS = HERE / "artifacts"
+ARTIFACTS = (
+    _LOCAL_ARTIFACTS if (_LOCAL_ARTIFACTS / "preprocessor.pkl").exists() else HERE.parent / "artifacts"
+)
 TREE_MODELS = ["rf", "xgb", "lgbm"]  # the models shipped in this bundle
 BEST_MODEL = "rf"                    # leaderboard winner (lowest validation MAE)
 
 
-def load_estimator(name: str):
+def load_estimator(name: str) -> object:
     """Load the raw fitted estimator that train_all.py saved (a dict with 'estimator')."""
     pkl = ARTIFACTS / f"{name}.pkl"
     if not pkl.exists():

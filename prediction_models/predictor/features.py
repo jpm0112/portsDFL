@@ -118,14 +118,20 @@ def engineer(raw: pd.DataFrame) -> pd.DataFrame:
     else:
         out["Calado diff"] = 0.0  # unknown before departure -- see README caveat
 
-    # covid_era from the arrival date.
-    arrival = pd.to_datetime(raw["arrival_datetime"])
+    # covid_era + cyclical time features. Fail loud on blank/unparseable dates rather
+    # than letting NaT slip through: NaT comparisons are all False -> a silent "post"
+    # era, and a NaT berthing -> NaN time features -> a downstream model crash or a
+    # quietly degraded prediction.
+    arrival = pd.to_datetime(raw["arrival_datetime"], errors="coerce")
+    berthing = pd.to_datetime(raw["berthing_datetime"], errors="coerce")
+    bad = raw.index[arrival.isna() | berthing.isna()].tolist()
+    if bad:
+        raise ValueError(f"Blank or unparseable arrival/berthing datetime in rows: {bad}")
     out["covid_era"] = np.select(
         [arrival < COVID_START, arrival < COVID_END], ["pre", "during"], default="post"
     )
 
     # Cyclical encodings from the berthing (atraque / first-mooring) datetime.
-    berthing = pd.to_datetime(raw["berthing_datetime"])
     out["atraque_hour_sin"], out["atraque_hour_cos"] = _cyclical(berthing.dt.hour, 24)
     out["atraque_dayofweek_sin"], out["atraque_dayofweek_cos"] = _cyclical(berthing.dt.dayofweek, 7)
     out["atraque_month_sin"], out["atraque_month_cos"] = _cyclical(berthing.dt.month, 12)

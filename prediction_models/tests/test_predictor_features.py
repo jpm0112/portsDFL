@@ -87,6 +87,13 @@ def test_cyclical_encoding_matches_formula() -> None:
     assert out["atraque_hour_cos"].iloc[0] == pytest.approx(np.cos(2 * np.pi * 14 / 24))
 
 
+def test_blank_datetime_raises() -> None:
+    with pytest.raises(ValueError, match="datetime"):
+        engineer(_raw_row(berthing_datetime=""))
+    with pytest.raises(ValueError, match="datetime"):
+        engineer(_raw_row(arrival_datetime=np.nan))
+
+
 def test_unseen_values_flags_only_unknowns() -> None:
     feats = engineer(_raw_row(**{"Puerto origen": "MADE_UP_PORT"}))
     vocab = {"Puerto origen": ["LIRQUEN", "CALLAO"], "Sitio": ["Sitio 1", "Sitio 2"]}

@@ -1,7 +1,8 @@
 # Prediction-only dependencies for the portable tree predictor (rf, xgb, lgbm).
 # No PyTorch: tree models run on CPU, and a GPU gives no benefit for inference.
-# Versions pinned to what the models were trained with, so the saved pickles load
-# without scikit-learn / xgboost version-mismatch warnings.
+# The estimator + preprocessor libs are pinned to the trained versions so the saved
+# pickles load without version-mismatch warnings. numpy/pandas are left as floors
+# (verified to load on pandas 3.x); pin them too if a future major breaks the unpickle.
 pandas>=2.0
 numpy>=1.26
 joblib>=1.3
