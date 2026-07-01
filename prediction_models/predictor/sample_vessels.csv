@@ -1,4 +1,0 @@
-vessel_id,Sitio,Tipo nave,arrival_datetime,berthing_datetime,Puerto origen,Puerto destino,Agencia,Línea naviera,Servicio,TRG,draft_arrival_bow,draft_arrival_stern,draft_departure_bow,draft_departure_stern
-1,Sitio 1,Contenedor,2024-06-15 08:30,2024-06-15 14:00,LIRQUEN,SAN VICENTE,82728500-5 - IAN TAYLOR,MSC,Andes,141635,12.5,12.9,11.8,12.2
-2,Sitio 4/5,Autero,2024-07-02 22:00,2024-07-03 03:00,IQUIQUE,CALLAO,80992000-3 - ULTRAMAR,NON-LINER,CAR CARRIERS,61321,8.6,8.8,7.5,7.6
-3,Sitio 2,Pasajeros,2025-01-10 06:00,2025-01-10 09:30,MEJILLONES,CORONEL,96566940-k - AGUNSA,,,66084,7.0,7.1,7.0,7.1
