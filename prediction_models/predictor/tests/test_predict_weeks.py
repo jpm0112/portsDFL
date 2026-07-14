@@ -55,9 +55,13 @@ def test_profile_averages_drafts_and_takes_modal_categoricals():
     assert row["TRG"] == 23300.0                      # mean of 23000 and 23600
     assert np.isclose(row["draft_arrival_bow"], 9.2)  # mean of 9.0 and 9.4
     assert row["Sitio"] == "Sitio 8"
-    assert set(fallbacks) >= set(ALL_FEATURES) - {"covid_era", "TRG"} - set(
-        c for c in ALL_FEATURES if c.startswith("atraque_")
-    ) or "TRG" in fallbacks  # fallbacks cover the history-sourced fields
+    # fallbacks cover exactly the history-sourced REQUIRED_COLUMNS fields, none NaN
+    # (except the engineer()-filled line/service, which may be NaN).
+    from predict_weeks import CATEGORICAL_FROM_HISTORY, NUMERIC_FROM_HISTORY
+
+    expected = set(CATEGORICAL_FROM_HISTORY.values()) | set(NUMERIC_FROM_HISTORY.values())
+    assert set(fallbacks) == expected
+    assert not pd.isna(fallbacks["TRG"]) and not pd.isna(fallbacks["Sitio"])
 
 
 def test_matched_vessel_enriches_and_engineers_cleanly():
@@ -105,3 +109,43 @@ def test_unseen_vessel_is_flagged_and_typed_from_cargo():
     assert "vessel not in history" in meta.loc[0, "notes"]
     assert enriched.loc[0, "Tipo nave"] == "Contenedor"  # guessed from Carga, not fleet mode
     assert enriched.loc[0, "TRG"] == fallbacks["TRG"]     # numeric falls back to global mean
+
+
+def test_missing_weekly_column_raises_clear_error():
+    history = _fake_history()
+    profile, fallbacks = build_vessel_profile(history)
+    agency_lookup = build_agency_lookup(history)
+    week = pd.DataFrame({"Nave": ["OSSA"], "Agencia": ["AGENTAL"]})  # no E.T.A.
+
+    import pytest
+
+    with pytest.raises(ValueError, match="E.T.A."):
+        enrich_week(week, profile, fallbacks, agency_lookup)
+
+
+def test_all_null_history_trg_fails_loud():
+    history = _fake_history()
+    history["TRG"] = np.nan  # degenerate history sheet -> NaN fallback must not pass silently
+
+    import pytest
+
+    with pytest.raises(ValueError, match="TRG"):
+        build_vessel_profile(history)
+
+
+def test_unmatched_agency_keeps_raw_name_and_notes_it():
+    history = _fake_history()
+    profile, fallbacks = build_vessel_profile(history)
+    agency_lookup = build_agency_lookup(history)
+    week = pd.DataFrame(
+        {
+            "E.T.A.": pd.to_datetime(["2024-11-15 08:00"]),
+            "Agencia": ["BRAND NEW AGENCY"],
+            "Nave": ["OSSA"],
+            "Carga": ["Granel sólido"],
+        }
+    )
+    enriched, meta = enrich_week(week, profile, fallbacks, agency_lookup)
+
+    assert enriched.loc[0, "Agencia"] == "BRAND NEW AGENCY"  # kept raw -> encoder prior
+    assert "agency unmatched" in meta.loc[0, "notes"]

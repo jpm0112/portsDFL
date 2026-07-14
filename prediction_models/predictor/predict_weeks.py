@@ -116,6 +116,15 @@ def build_vessel_profile(history: pd.DataFrame) -> tuple[pd.DataFrame, dict[str,
         out: _first_mode(history[raw]) for raw, out in CATEGORICAL_FROM_HISTORY.items()
     }
     fallbacks.update({out: history[raw].mean() for raw, out in NUMERIC_FROM_HISTORY.items()})
+    # Fail loud on an unusable (all-null) history column: a NaN fallback would silently
+    # poison the numeric features downstream. Línea naviera / Servicio are exempt --
+    # engineer() fills those with NON-LINER / NO SERVICE.
+    unusable = [
+        field for field, value in fallbacks.items()
+        if pd.isna(value) and field not in ("Línea naviera", "Servicio")
+    ]
+    if unusable:
+        raise ValueError(f"History has no usable values for: {unusable}")
     return profile, fallbacks
 
 
@@ -143,7 +152,13 @@ def enrich_week(
     Returns:
         (enriched, meta): ``enriched`` has exactly REQUIRED_COLUMNS; ``meta`` has
         ``matched_history`` (bool) and ``notes`` (imputation caveats), aligned to ``week``.
+
+    Raises:
+        ValueError: if the weekly file lacks a needed column.
     """
+    missing = [c for c in ("Nave", "E.T.A.", "Agencia") if c not in week.columns]
+    if missing:
+        raise ValueError(f"Weekly file is missing required column(s): {missing}")
     keys = week["Nave"].map(_norm_name)
     matched = keys.isin(profile.index)
     aligned = profile.reindex(keys.to_numpy())
@@ -157,6 +172,11 @@ def enrich_week(
     # fleet-wide mode (a container ship shouldn't inherit "bulk" just because bulk is common).
     unseen = ~matched.to_numpy()
     if unseen.any():
+        if "Carga" not in week.columns:
+            raise ValueError(
+                "Weekly file has vessels not in history and no 'Carga' column to guess their type: "
+                f"{sorted(week.loc[unseen, 'Nave'])}"
+            )
         enriched.loc[unseen, "Tipo nave"] = week.loc[unseen, "Carga"].map(_carga_to_type)
 
     # E.T.A. drives arrival; no real berthing time exists in a schedule, so reuse it (caveat below).
@@ -228,11 +248,19 @@ def main() -> None:
           f"{len(agency_lookup)} agencies. Best model = {BEST_MODEL}.\n")
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
+    failed: list[str] = []
     for path in week_files:
-        week = _read_week(path)
-        enriched, meta = enrich_week(week, profile, fallbacks, agency_lookup)
-        features = engineer(enriched)
-        preds = predict_week(features, models)
+        # One malformed schedule (missing column, blank E.T.A., ...) raises ValueError;
+        # report it and keep processing the remaining weeks instead of aborting the batch.
+        try:
+            week = _read_week(path)
+            enriched, meta = enrich_week(week, profile, fallbacks, agency_lookup)
+            features = engineer(enriched)
+            preds = predict_week(features, models)
+        except ValueError as exc:
+            print(f"  ! {path.name}: SKIPPED - {exc}")
+            failed.append(path.name)
+            continue
 
         result = pd.concat(
             [
@@ -245,9 +273,12 @@ def main() -> None:
         )
         out_path = args.out_dir / f"{path.stem}_predictions.csv"
         result.to_csv(out_path, index=False, encoding="utf-8")
+        report = BEST_MODEL if BEST_MODEL in preds.columns else models[0]
         print(f"  {path.name}: {len(result)} vessels -> {out_path.name} "
               f"({int(meta['matched_history'].sum())}/{len(meta)} matched history, "
-              f"{BEST_MODEL} mean {preds[BEST_MODEL].mean():.1f} h)")
+              f"{report} mean {preds[report].mean():.1f} h)")
+    if failed:
+        raise SystemExit(f"\n{len(failed)} file(s) failed: {failed}")
 
 
 if __name__ == "__main__":
