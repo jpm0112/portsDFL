@@ -10,3 +10,4 @@ scikit-learn==1.9.0
 xgboost==3.2.0
 lightgbm==4.6.0
 category-encoders==2.9.0
+openpyxl>=3.1        # read weekly .xlsx schedules + the vessel-history workbook (predict_weeks.py)
