@@ -13,8 +13,46 @@ WHAT YOU NEED
 
 No GPU is required. The models run on the CPU and predict in seconds.
 
-HOW TO USE
-----------
+TWO WAYS TO USE IT
+------------------
+  A) WEEKLY SCHEDULES (PredictWeeks.bat) -- drop the weekly Excel files you
+     receive into the weeks\ folder and predict them all at once. The tool
+     fills in the technical fields (tonnage, drafts, vessel type, berth...)
+     automatically from each vessel's port history.
+  B) SINGLE CSV (Predict.bat) -- you provide every field yourself in one CSV.
+
+A) WEEKLY SCHEDULES
+-------------------
+  1. Leave your weekly files in the  weeks\  folder (.xlsx or .csv, any name,
+     as many as you want -- e.g. semana1.xlsx, semana2.xlsx).
+     Each file needs at least these columns (extra columns are ignored):
+       Nave      - vessel name (used to look up the vessel's history)
+       E.T.A.    - estimated arrival, YYYY-MM-DD HH:MM
+       Agencia   - agency name (e.g. ULTRAMAR)
+       Carga     - cargo type (only used if the vessel is new to the port)
+  2. Double-click  PredictWeeks.bat
+     - The first run sets up a local environment (a few minutes). Later runs are instant.
+  3. Results: one  <name>_predictions.csv  per weekly file, in the
+     predictions\  folder. Columns added to your original ones:
+       rf, xgb, lgbm   - predicted hours at berth per model (rf is the best)
+       ensemble_mean   - average of the three
+       matched_history - True if the vessel was found in the port history;
+                         False means its technical fields were estimated and
+                         the prediction is rougher
+       notes           - any caveats for that row
+
+  NEEDED FILE: this mode reads the vessel-history workbook
+    ..\..\data\BBDD limpia(1).xlsx   (sheet "Resume Naves Comerciales (4)")
+  so it works out of the box inside the full repo. If you copy this folder
+  elsewhere, bring that file along and point to it with:
+    python predict_weeks.py --history "C:\path\to\BBDD limpia(1).xlsx"
+
+  Caveat: schedules only carry the E.T.A., so it is used as the berthing time
+  too (the models were trained on real berthing times). Predictions are a bit
+  rougher because of this; every row's notes column records it.
+
+B) SINGLE CSV
+-------------
   1. Double-click  Predict.bat
      - The first run sets up a local environment (a few minutes). Later runs are instant.
   2. It lists the CSV files in this folder and asks which one to use
