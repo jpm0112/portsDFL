@@ -15,22 +15,22 @@ No GPU is required. The models run on the CPU and predict in seconds.
 
 TWO WAYS TO USE IT
 ------------------
-  A) WEEKLY SCHEDULES (PredictWeeks.bat) -- drop the weekly Excel files you
-     receive into the weeks\ folder and predict them all at once. The tool
+  A) WEEKLY SCHEDULES (Run_Weekly_Predictions.bat) -- drop the weekly Excel files you
+     receive into the weekly_schedules\ folder and predict them all at once. The tool
      fills in the technical fields (tonnage, drafts, vessel type, berth...)
      automatically from each vessel's port history.
-  B) SINGLE CSV (Predict.bat) -- you provide every field yourself in one CSV.
+  B) SINGLE CSV (Run_Single_CSV_Prediction.bat) -- you provide every field yourself in one CSV.
 
 A) WEEKLY SCHEDULES
 -------------------
-  1. Leave your weekly files in the  weeks\  folder (.xlsx or .csv, any name,
+  1. Leave your weekly files in the  weekly_schedules\  folder (.xlsx or .csv, any name,
      as many as you want -- e.g. semana1.xlsx, semana2.xlsx).
      Each file needs at least these columns (extra columns are ignored):
        Nave      - vessel name (used to look up the vessel's history)
        E.T.A.    - estimated arrival, YYYY-MM-DD HH:MM
        Agencia   - agency name (e.g. ULTRAMAR)
        Carga     - cargo type (only used if the vessel is new to the port)
-  2. Double-click  PredictWeeks.bat
+  2. Double-click  Run_Weekly_Predictions.bat
      - The first run sets up a local environment (a few minutes). Later runs are instant.
   3. Results: one  <name>_predictions.csv  per weekly file, in the
      predictions\  folder. Columns added to your original ones:
@@ -53,7 +53,7 @@ A) WEEKLY SCHEDULES
 
 B) SINGLE CSV
 -------------
-  1. Double-click  Predict.bat
+  1. Double-click  Run_Single_CSV_Prediction.bat
      - The first run sets up a local environment (a few minutes). Later runs are instant.
   2. It lists the CSV files in this folder and asks which one to use
      (if there is only one, it picks it automatically).

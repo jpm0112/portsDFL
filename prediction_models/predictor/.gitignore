@@ -6,4 +6,4 @@ predictions.csv
 # per-week output folder (predict_weeks.py)
 predictions/
 # operational weekly-schedule inputs (real vessel data) stay local
-weeks/
+weekly_schedules/

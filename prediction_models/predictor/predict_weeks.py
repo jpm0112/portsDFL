@@ -1,6 +1,6 @@
 """Batch-predict berth service time for weekly vessel-schedule files.
 
-An operational weekly schedule (e.g. ``weeks/semana1.xlsx``) only carries a handful of
+An operational weekly schedule (e.g. ``weekly_schedules/semana1.xlsx``) only carries a handful of
 fields -- ``E.T.A., Agencia, Nave, Eslora, Terminal, Emp. muellaje, Carga, Detalle`` --
 none of the heavy predictors the tree models need (TRG, vessel type, drafts, ports, Sitio,
 line, service). This script recovers those by joining each vessel **by name** to its
@@ -8,8 +8,8 @@ history in ``data/BBDD limpia(1).xlsx`` (per-vessel mode for categoricals, mean 
 numerics), engineers the 17 model features via :func:`features.engineer`, runs the tree
 models (rf/xgb/lgbm), and writes one predictions CSV per weekly file.
 
-    python predict_weeks.py                              # weeks/ -> predictions/
-    python predict_weeks.py --weeks-dir weeks --out-dir predictions
+    python predict_weeks.py                              # weekly_schedules/ -> predictions/
+    python predict_weeks.py --weeks-dir my_schedules --out-dir my_results
 
 Known approximation: the weekly files have no actual berthing time, so ``E.T.A.`` is used
 for both arrival and berthing. That mis-times the 6 cyclical berthing features somewhat;
@@ -34,7 +34,7 @@ from features import REQUIRED_COLUMNS, VESSEL_TYPE_GROUP, engineer, unseen_value
 from predict import ARTIFACTS, BEST_MODEL, TREE_MODELS, load_estimator
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_WEEKS_DIR = HERE / "weeks"
+DEFAULT_WEEKS_DIR = HERE / "weekly_schedules"
 DEFAULT_OUT_DIR = HERE / "predictions"
 DEFAULT_HISTORY = HERE.parent.parent / "data" / "BBDD limpia(1).xlsx"
 HISTORY_SHEET = "Resume Naves Comerciales (4)"

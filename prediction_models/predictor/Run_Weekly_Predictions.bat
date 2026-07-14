@@ -3,7 +3,7 @@ setlocal enabledelayedexpansion
 
 REM ============================================================================
 REM  Weekly-schedule batch predictor (rf, xgb, lgbm).
-REM  Enriches every file in weeks\ from vessel history and writes one
+REM  Enriches every file in weekly_schedules\ from vessel history and writes one
 REM  <name>_predictions.csv per file into predictions\.
 REM  First run builds a local .venv and installs the dependencies (a few minutes,
 REM  needs internet). Every run after that goes straight to predicting.
@@ -40,16 +40,16 @@ echo ==========================================
 echo    Weekly vessel service-time predictor
 echo ==========================================
 echo.
-REM weeks\ is gitignored (real vessel data), so a fresh clone lacks it - create it.
-if not exist "%HERE%weeks\" mkdir "%HERE%weeks"
-if not exist "%HERE%weeks\*.xlsx" if not exist "%HERE%weeks\*.csv" (
-    echo No schedule files found in the weeks\ folder.
-    echo Put your weekly .xlsx ^(or .csv^) files in:  %HERE%weeks\
+REM weekly_schedules\ is gitignored (real vessel data), so a fresh clone lacks it - create it.
+if not exist "%HERE%weekly_schedules\" mkdir "%HERE%weekly_schedules"
+if not exist "%HERE%weekly_schedules\*.xlsx" if not exist "%HERE%weekly_schedules\*.csv" (
+    echo No schedule files found in the weekly_schedules\ folder.
+    echo Put your weekly .xlsx ^(or .csv^) files in:  %HERE%weekly_schedules\
     echo then run this again.
     pause & exit /b 1
 )
 
-echo Predicting every file in weeks\ ...
+echo Predicting every file in weekly_schedules\ ...
 echo.
 "%VENV_PY%" "%HERE%predict_weeks.py"
 if errorlevel 1 goto :run_fail
