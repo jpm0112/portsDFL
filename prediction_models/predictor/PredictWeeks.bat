@@ -40,6 +40,8 @@ echo ==========================================
 echo    Weekly vessel service-time predictor
 echo ==========================================
 echo.
+REM weeks\ is gitignored (real vessel data), so a fresh clone lacks it - create it.
+if not exist "%HERE%weeks\" mkdir "%HERE%weeks"
 if not exist "%HERE%weeks\*.xlsx" if not exist "%HERE%weeks\*.csv" (
     echo No schedule files found in the weeks\ folder.
     echo Put your weekly .xlsx ^(or .csv^) files in:  %HERE%weeks\
