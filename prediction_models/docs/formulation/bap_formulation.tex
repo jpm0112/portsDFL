@@ -44,6 +44,19 @@ ablation. This note states the formulation, its hard/soft window modes, the
 single-week solve scope, and how it sits in the published BAP literature.
 \end{abstract}
 
+\begin{center}
+\fbox{\parbox{0.92\linewidth}{\textbf{Status note (2026-07-18).} This document
+states the \emph{target} model. The implemented code
+(\texttt{optimizers/src/bap\_optim/discrete\_bap.py}) currently runs the
+\emph{unweighted} operational objectives---total waiting
+$\sum_i (s_i - a_i)$ by default (equivalent to total completion
+$\sum_i (s_i + \tau_i)$ up to a constant), or total berth idle time---and
+vessel priority weights $w_i$ are deferred. The DFL loss and the regret metric
+score the same unweighted completion, which is what makes regret $\geq 0$
+exact. See \texttt{bap\_formulation\_current.tex} for the as-implemented
+formulation.}}
+\end{center}
+
 \section{Problem setting}
 The Port of San Antonio operates several terminals/berths that are
 \emph{heterogeneous}: each can physically handle only certain vessel types

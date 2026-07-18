@@ -246,8 +246,9 @@ class DiscreteBAP(optOmoModel):
         else:
             warnings.warn(
                 f"Solver {self.solver_name!r} is not Gurobi: the MIPGap=0 "
-                "exactness guarantee is not enforced, so regret may be noisy or "
-                "negative. Use gurobi for DFL/regret experiments.",
+                "exactness guarantee is not enforced (regret may be noisy or "
+                "negative) and no TimeLimit is set, so a hard instance may run "
+                "unbounded. Use gurobi for DFL/regret experiments.",
                 stacklevel=2,
             )
 
@@ -541,12 +542,19 @@ class DiscreteBAP(optOmoModel):
                     f"In hard-window mode this usually means the service vessels "
                     f"cannot all be berthed within their no-wait windows."
                 )
+            hint = (
+                "The 60s TimeLimit was likely hit before closing the MIP gap; "
+                "increase TimeLimit for larger instances."
+                if self.solver_name == "gurobi"
+                else f"No time limit is configured for solver "
+                f"{self.solver_name!r}; the solver stopped on its own criteria "
+                f"without proving optimality."
+            )
             raise RuntimeError(
                 f"DBAP solver did not prove optimality: "
                 f"termination_condition={status} "
                 f"(N={self.instance.n_vessels}, B={self.instance.n_berths}). "
-                f"The 60s TimeLimit was likely hit before closing the MIP gap; "
-                f"increase TimeLimit for larger instances."
+                + hint
             )
 
         N = self.instance.n_vessels

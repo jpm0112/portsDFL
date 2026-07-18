@@ -89,6 +89,23 @@
 % ---------------------------------------------------------------------
 \begin{document}
 
+% ---------------------------------------------------------------------
+% STATUS NOTE (2026-07-18): this explainer predates the objective/loss
+% alignment on branch review-fixes. The implemented MILP objective and the
+% DFL loss are now UNWEIGHTED (total waiting / total completion; the w_i
+% priority weights shown in the formulas below are deferred and do not
+% enter the optimizer or the loss). Treat the weighted expressions here as
+% the target model, not the code. Source of truth: discrete_bap.py and
+% prediction_models/docs/formulation/bap_formulation_current.tex.
+% ---------------------------------------------------------------------
+\begin{center}
+\fbox{\parbox{0.9\linewidth}{\textbf{Status note (2026-07-18).} The formulas in
+this explainer show the \emph{weighted} objective/loss $\sum_i w_i(\cdot)$. As
+implemented (branch \texttt{review-fixes}), the MILP objective, the DFL loss,
+and the regret metric are all \emph{unweighted}; priority weights are a
+deferred extension. See \texttt{bap\_formulation\_current.tex}.}}
+\end{center}
+
 % =====================================================================
 % Title page
 % =====================================================================

@@ -155,4 +155,35 @@ they need resolving, not just documenting:
 
 ## 5. Independent review of the `review-fixes` diff
 
-*(pending — will be appended)*
+Verdict: **APPROVE — 0 P0/P1/P2, 3 P3.** (Caveat: effectively an Opus-only
+review — the Gemini CLI was quota-limited and its fallback pass was discarded
+for inverting the change's intent; Codex was at its usage limit.)
+
+Independently re-verified as sound:
+- The regret ≥ 0 argument, line by line: greedy re-packing is the minimal
+  feasible `Σsᵢ` for a fixed decision, so the FI decision's re-derived cost is
+  the global minimum. Robust even to a too-small big-M on the *predicted*
+  solve (only the FI solve, run under small true τ, must be exact).
+- Weights removal and `weighted_cost_*` → `cost_*` renames are complete across
+  all callers (grep-verified; no stragglers).
+- The new big-M bound is exactly the worst-case single-berth pile-up bound.
+- The `if fi_mean` numpy-falsiness guard, the ddof fallback, the empty-val
+  guard, and the `obj >= -1e-3` test change are all correct.
+
+Its three P3 findings, **all fixed** in the follow-up commit:
+1. **Formulation docs contradicted the code** — `bap_formulation.tex`,
+   `related_formulations.tex`, and `dfl_explainer.tex` still stated the
+   weighted objective. Fixed with status notes marking the weighted model as
+   the *target* (weights deferred), a corrected claim in
+   `related_formulations.tex`, and a corrected formulation `README.md` that
+   points to `bap_formulation_current.tex` as the as-implemented spec.
+   (Note: the `.tex` sources changed; the committed PDFs are now stale until
+   recompiled — `pdflatex` twice, or latexmk per the formulation README.)
+2. **Latent coupling**: `schedule_cost_under_true_tau` is only regret-valid
+   under `objective="waiting"`; a future caller pairing it with the `"idle"`
+   objective would silently break regret ≥ 0. Both trainers'
+   `_evaluate_regret` now raise unless the optmodel uses `"waiting"`.
+3. **Non-Gurobi solve**: no TimeLimit is set (could run unbounded on a hard
+   instance) and the non-optimal error message wrongly blamed a 60s limit.
+   The constructor warning now mentions unbounded runtime and the error
+   message is solver-aware. Accepted residual: Gurobi-only in practice.

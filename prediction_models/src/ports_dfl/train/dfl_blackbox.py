@@ -72,6 +72,15 @@ def _evaluate_regret(
     feasibly under true τ. The full-information (FI) decision is solved
     under true τ — that's the post-hoc optimal benchmark in DFL terminology.
     """
+    # regret >= 0 holds only when the MILP minimises the same quantity the
+    # re-derived cost scores: the plain "waiting" objective (= unweighted
+    # completion up to a constant). Any other objective or an active
+    # soft-window penalty would silently break the guarantee.
+    if optmodel.objective != "waiting":
+        raise ValueError(
+            f"Regret evaluation requires objective='waiting', "
+            f"got {optmodel.objective!r}."
+        )
     model.eval()
     regrets = []
     with torch.no_grad():

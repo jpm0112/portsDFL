@@ -4,10 +4,16 @@ Self-contained write-up of the week-long Berth Allocation MILP and how it sits
 in the literature.
 
 ## Contents
-- **`bap_formulation.tex`** — the extended MILP: sets/parameters/variables,
-  objective, all constraints (compatible-berth assignment, arrival release,
-  hard/soft no-wait service windows, sequencing, big-M precedence), the
-  single-week solve scope, and the decision-focused-learning integration.
+- **`bap_formulation.tex`** — the extended **target** MILP: sets/parameters/
+  variables, objective, all constraints (compatible-berth assignment, arrival
+  release, hard/soft no-wait service windows, sequencing, big-M precedence),
+  the single-week solve scope, and the decision-focused-learning integration.
+  States the *weighted* completion objective; the implemented code is
+  currently **unweighted** (see the status note in the doc).
+- **`bap_formulation_current.tex`** — the **as-implemented** formulation:
+  unweighted waiting/idle objectives, matching
+  `optimizers/src/bap_optim/discrete_bap.py`. This is the doc that matches the
+  code and the reported experiments.
 - **`related_formulations.tex`** — `\input` by the main doc: the "Related
   formulations" section (prose), a comparison table against the closest
   published BAP models, and a novelty statement (including what is *not* novel).
@@ -29,5 +35,7 @@ pdflatex bap_formulation && bibtex bap_formulation && pdflatex bap_formulation &
 - The literature comparison was assembled from a multi-source review; a few
   primary papers were paywalled, so verify exact equation symbols / bibliographic
   details before external publication (see the caveats in the project notes).
-- The notation matches `optimizers/src/bap_optim/discrete_bap.py` and the style of
-  `docs/meetings/dfl_explainer.tex`.
+- The notation follows the style of `docs/meetings/dfl_explainer.tex`. The
+  *objective* in `bap_formulation.tex` is the weighted target model;
+  `bap_formulation_current.tex` is the one whose objective matches
+  `discrete_bap.py` (unweighted).

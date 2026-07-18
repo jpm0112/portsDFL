@@ -3,7 +3,9 @@
 \paragraph{Related formulations.}
 Our model is a discrete, dynamic Berth Allocation Problem (BAP) over a single
 planning week, solving an assignment, start-time and per-berth precedence MILP
-that minimizes total weighted completion time $\sum_i w_i (s_i + \tau_i)$. We
+that minimizes total completion time $\sum_i (s_i + \tau_i)$ (equivalently,
+total waiting; vessel priority weights $w_i$ are a planned extension --- the
+implemented objective is unweighted). We
 situate it against the closest published BAP formulations along five axes: time
 representation, objective, time-window/priority semantics, vessel--berth
 compatibility, and whether the service (handling) time is \emph{learned}.

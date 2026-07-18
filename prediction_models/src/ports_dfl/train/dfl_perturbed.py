@@ -87,6 +87,14 @@ def _evaluate_regret(
     Same protocol as :func:`ports_dfl.train.dfl_blackbox._evaluate_regret`.
     """
     model.eval()
+    # regret >= 0 holds only when the MILP minimises the same quantity the
+    # re-derived cost scores: the plain "waiting" objective (= unweighted
+    # completion up to a constant).
+    if optmodel.objective != "waiting":
+        raise ValueError(
+            f"Regret evaluation requires objective='waiting', "
+            f"got {optmodel.objective!r}."
+        )
     regrets: list[float] = []
     with torch.no_grad():
         # strict=True guards against a silent length mismatch between features and labels
