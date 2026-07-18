@@ -8,7 +8,8 @@ no longer applies.
 Pipeline per gradient step:
     1.  Predict τ̂ for the N vessels in the instance.
     2.  ``blackboxOpt(τ̂)`` solves the DBAP under τ̂, returning start times s*.
-    3.  Compute true cost  L = Σᵢ wᵢ (s*[i] + τ_trueᵢ)   ← the regret-style loss.
+    3.  Compute true cost  L = Σᵢ (s*[i] + τ_trueᵢ)   ← the regret-style loss
+        (unweighted, matching the MILP's weight-blind objective).
     4.  Backpropagate through ``blackboxOpt`` (Pogančić et al., 2020 STE).
 """
 

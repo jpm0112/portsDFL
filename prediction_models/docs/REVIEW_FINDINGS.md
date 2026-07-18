@@ -6,6 +6,61 @@ left unchanged (behavior-altering or judgment-dependent) — your call.
 
 Severity: 🔴 likely bug / correctness · 🟡 robustness / edge case · ⚪ style / cleanup.
 
+## Round 2 fixes (2026-07-18)
+
+A second review pass (methodology + correctness). Fixes applied on branch
+`review-fixes`; two items are **documented only** (your call on how to resolve).
+
+**Applied:**
+1. ✅ 🔴 **Objective/loss/metric mismatch (the load-bearing one).** The MILP's default
+   objective is unweighted waiting `Σᵢ(sᵢ − aᵢ)`, but the DFL loss, the regret metric,
+   the README and the report scored *weighted completion* `Σᵢ wᵢ(sᵢ + τᵢ)` — an objective
+   the optimizer never minimises. Because the full-information benchmark minimises the
+   unweighted objective, a prediction could beat it on the weighted metric → **regret was
+   not guaranteed ≥ 0** (the `-1e-1` test tolerances were absorbing this, not float noise).
+   Also, weights never entered the optimizer, so DFL could not learn to prioritise heavy
+   vessels *through* it — the mechanism `run_dfl_synthetic` claims to show. **Fix:** dropped
+   weights from `schedule_cost_under_true_tau` and both trainers' loss + regret eval; the
+   cost is now `Σᵢ(sᵢ + τᵢ)`, which equals the objective up to a constant, so regret ≥ 0
+   holds. Tightened the regret/FI-optimality test tolerances to `1e-3`; renamed the
+   `weighted_cost_*` summary keys to `cost_*` across the run scripts, `compare.py`,
+   `build_report.py`; corrected the README + report to state τ enters only the precedence
+   constraints. *(Chosen direction: align to the unweighted objective. Putting weighted
+   completion into the MILP objective — so weights drive scheduling and PyEPO's linear-cost
+   assumption holds — is the alternative, but it invalidates the committed results and needs
+   a full re-run.)*
+2. ✅ 🔴 **`generate_bap_instance` big-M** — was `horizon + 400`, which does not scale with N
+   and can silently cut valid schedules once a berth's cumulative completion exceeds it
+   (this supersedes the note below at §step-A that called `horizon + 400` "looser, safe" —
+   it is not safe). Now `max(arrivals) + N·service_time_ub`.
+3. ✅ 🟡 **DFL `_evaluate_regret` empty-val `nan`** — `np.mean([])` silently disabled early
+   stopping; now raises on an empty validation set.
+4. ✅ 🟡 **`MIPGap=0` is Gurobi-only** — applied only for gurobi; other solvers now warn that
+   the exact-optimality (hence regret ≥ 0) assumption is not enforced.
+5. ✅ ⚪ Documented that `derive_starts_under_true_tau` is channel-agnostic; removed the dead
+   `from pyepo import EPO`; guarded `test_discrete_bap` with `pytest.importorskip`;
+   `summarize_folds` single-fold std no longer `nan`; guarded the `regret_relative_pct`
+   zero-division. Added a seeded smoke regression test for the blackbox DFL loop
+   (`tests/test_dfl_train.py`).
+
+**Documented only (not changed — your decision):**
+- 🔴 **`Calado diff` is suspected target leakage.** It is the arrival−departure draft, known
+   only *after* service (`docs/project_description.md` flags draft difference as
+   post-berthing), yet it is a training feature in `config.ALL_FEATURES`. `predictor/features.py`
+   defaults it to 0 at inference and admits `covid_era` cutoffs are reverse-engineered —
+   consistent with the real `data/training_dataset.csv` having been built with the post-hoc
+   value. **Verify how that CSV computed `Calado diff` with the data owner; if post-hoc,
+   remove it and re-tune.**
+- 🟡 **`data/training_dataset.csv` is not reproducible.** The committed `data_pipeline`
+   builders emit a different schema (`estadia_sitio_hours`, …) than the models consume
+   (`service_time_hours`, `covid_era`, cyclical `atraque_*`, `Calado diff`). No committed
+   script regenerates the consumed CSV, so the leakage-safe logic in `build_training_dataset.py`
+   applies to a schema the models don't use. **Commit the actual feature-engineering step.**
+- 🟡 **"Real BAP" uses synthetic scheduling geometry.** `run_dfl_real_bap.py` groups unrelated
+   real vessels into instances by random permutation and gives them one fabricated
+   arrival/weight vector from `generate_bap_instance`. τ is real; the "week" is not. State this
+   as a limitation rather than implying real scheduling.
+
 ## Summary
 
 ~61 Python files across `prediction_models/` and repo-root `src/` were
