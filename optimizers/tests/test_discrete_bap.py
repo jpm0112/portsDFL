@@ -79,7 +79,7 @@ def test_fi_decision_is_minimum_cost(small_instance) -> None:
     model.solve()
     assign_fi, order_fi = extract_decision(model)
     cost_fi, _ = schedule_cost_under_true_tau(
-        assign_fi, order_fi, true_tau, small_instance.arrivals, small_instance.weights
+        assign_fi, order_fi, true_tau, small_instance.arrivals
     )
 
     rng = np.random.default_rng(0)
@@ -91,11 +91,12 @@ def test_fi_decision_is_minimum_cost(small_instance) -> None:
         model.solve()
         a, o = extract_decision(model)
         cost, _ = schedule_cost_under_true_tau(
-            a, o, true_tau, small_instance.arrivals, small_instance.weights
+            a, o, true_tau, small_instance.arrivals
         )
-        # With MIPGap=0 both solves are exact optima, so the FI solve cannot be
-        # beaten; the tiny slack only absorbs float32 reconstruction noise.
-        assert cost >= cost_fi - 1e-1
+        # The unweighted cost matches the MILP objective up to a constant, so with
+        # MIPGap=0 the FI solve is the exact minimiser and cannot be beaten; the
+        # tight slack only absorbs float32 reconstruction noise.
+        assert cost >= cost_fi - 1e-3
 
 
 def test_regret_is_nonnegative(small_instance) -> None:
@@ -111,7 +112,7 @@ def test_regret_is_nonnegative(small_instance) -> None:
     model.solve()
     a_p, o_p = extract_decision(model)
     cost_pred, _ = schedule_cost_under_true_tau(
-        a_p, o_p, true_tau, small_instance.arrivals, small_instance.weights
+        a_p, o_p, true_tau, small_instance.arrivals
     )
 
     # Full-information decision (solve under true τ), scored against true τ.
@@ -119,10 +120,11 @@ def test_regret_is_nonnegative(small_instance) -> None:
     model.solve()
     a_fi, o_fi = extract_decision(model)
     cost_fi, _ = schedule_cost_under_true_tau(
-        a_fi, o_fi, true_tau, small_instance.arrivals, small_instance.weights
+        a_fi, o_fi, true_tau, small_instance.arrivals
     )
 
     # Regret = cost(predicted) − cost(FI) must be ≥ 0 by definition (FI is optimal
-    # under true τ). With MIPGap=0 the FI solve is exact, so the tiny tolerance
-    # only absorbs float32 reconstruction noise.
-    assert cost_pred - cost_fi >= -1e-1
+    # under true τ, and the unweighted cost matches the objective up to a constant).
+    # With MIPGap=0 the FI solve is exact, so the tight tolerance only absorbs
+    # float32 reconstruction noise.
+    assert cost_pred - cost_fi >= -1e-3

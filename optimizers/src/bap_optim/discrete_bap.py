@@ -641,15 +641,21 @@ def schedule_cost_under_true_tau(
     order: np.ndarray,
     true_tau: np.ndarray,
     arrivals: np.ndarray,
-    weights: np.ndarray,
 ) -> tuple[float, np.ndarray]:
-    """Σᵢ wᵢ (sᵢ + τᵢ) where sᵢ is recomputed feasibly under true τ.
+    """Σᵢ (sᵢ + τᵢ) where sᵢ is recomputed feasibly under true τ.
+
+    Unweighted total completion time. This matches the MILP's default
+    ``"waiting"`` objective Σᵢ(sᵢ − aᵢ) up to the additive constant Σᵢ(aᵢ + τᵢ),
+    so the full-information decision that minimises the objective also minimises
+    this cost — which is what makes regret ≥ 0 hold. (Vessel priority weights are
+    deliberately not applied here; the objective is weight-blind, so scoring with
+    weights would let a prediction beat the FI benchmark and make regret negative.)
 
     Returns:
-        (cost, starts) — cost in weighted-hour units; starts as a side-effect.
+        (cost, starts) — cost in hours; starts as a side-effect.
     """
     starts = derive_starts_under_true_tau(assignment, order, true_tau, arrivals)
-    cost = float(np.dot(weights, starts + true_tau))
+    cost = float(np.sum(starts + true_tau))
     return cost, starts
 
 

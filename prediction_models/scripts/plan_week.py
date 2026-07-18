@@ -249,8 +249,8 @@ def main() -> None:
     kpis = compute_kpis(bundle, starts, assignment,
                         horizon_h=args.week_days * 24.0, ein=ein, eout=eout)
 
-    objective_name = ("weighted departure" if bundle.channel_time is not None
-                      else "weighted completion time")
+    objective_name = ("channel-entry waiting" if bundle.channel_time is not None
+                      else "berth waiting time")
     print(f"\nSolved. objective ({objective_name}{' + penalty' if args.soft else ''}) = {obj:.1f}\n")
     _print_schedule(rows)
     _print_kpis(kpis)

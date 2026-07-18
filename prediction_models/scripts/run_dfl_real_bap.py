@@ -16,7 +16,7 @@ Pipeline
 6. Train the DFL model with blackbox differentiation through the DBAP MILP.
 7. Evaluate both on held-out instances:
      - predictive: MAE, RMSE, MAPE
-     - decision quality: weighted completion time under prediction-driven schedule
+     - decision quality: total completion time under prediction-driven schedule
      - decision quality: regret vs FI optimum
      - schedule structure: makespan, berth utilization, mean wait time
      - assignment overlap: % of vessels assigned to the same berth as in the FI decision
@@ -161,7 +161,7 @@ def _evaluate_decisions(
             optmodel.solve()
             assign_pred, order_pred = extract_decision(optmodel)
             cost_pred, starts_pred = schedule_cost_under_true_tau(
-                assign_pred, order_pred, tau_true, instance.arrivals, instance.weights
+                assign_pred, order_pred, tau_true, instance.arrivals
             )
 
             # Full-information (FI) decision: solve under true τ
@@ -169,7 +169,7 @@ def _evaluate_decisions(
             optmodel.solve()
             assign_fi, order_fi = extract_decision(optmodel)
             cost_fi, starts_fi = schedule_cost_under_true_tau(
-                assign_fi, order_fi, tau_true, instance.arrivals, instance.weights
+                assign_fi, order_fi, tau_true, instance.arrivals
             )
 
             rows.append(
@@ -194,8 +194,8 @@ def _evaluate_decisions(
     df = pd.DataFrame(rows)
     summary = {
         "model": tag,
-        "weighted_cost_pred_decision_mean": df["true_cost_pred_decision"].mean(),
-        "weighted_cost_fi_mean": df["true_cost_fi_decision"].mean(),
+        "cost_pred_decision_mean": df["true_cost_pred_decision"].mean(),
+        "cost_fi_mean": df["true_cost_fi_decision"].mean(),
         "regret_mean": df["regret"].mean(),
         # Mean regret as a % of the optimal cost (lower is better).
         # NOTE: if the FI cost mean is 0 this divides by zero -> inf/nan (see review).

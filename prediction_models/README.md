@@ -71,7 +71,12 @@ Discrete BAP (Cordeau et al. 2005, Bierwirth & Meisel 2010, 2015):
 - Each vessel has an arrival time aᵢ, a weight wᵢ, a true service time τᵢ.
 - Decisions: x[i, b] (assignment), s[i] (start time), z[i, j, b]
   (precedence at berth b).
-- Objective: minimize Σᵢ wᵢ (sᵢ + τᵢ), i.e. weighted completion time.
+- Objective (default `"waiting"`): minimize Σᵢ (sᵢ − aᵢ), i.e. total (unweighted)
+  waiting time. This equals total completion time Σᵢ (sᵢ + τᵢ) up to a constant,
+  so the DFL loss and the regret metric score unweighted completion consistently.
+  Vessel weights wᵢ are **not** in the objective yet ("come later" in the code) —
+  scoring regret with weights while the optimizer ignores them would let a
+  prediction beat the full-information benchmark and make regret negative.
 - Big-M precedence constraints couple s, z, τ across vessels at the same
   berth.
 

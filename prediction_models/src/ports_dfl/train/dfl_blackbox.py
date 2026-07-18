@@ -65,7 +65,7 @@ def _evaluate_regret(
     instance: BAPInstance,
     optmodel: DiscreteBAP,
 ) -> float:
-    """Mean regret across val instances (true cost units, weight·hours).
+    """Mean regret across val instances (true cost units, hours).
 
     The decision (x, z) is solved under the predictor's τ̂, then re-evaluated
     feasibly under true τ. The full-information (FI) decision is solved
@@ -85,7 +85,7 @@ def _evaluate_regret(
             assign_pred, order_pred = extract_decision(optmodel)
             # re-evaluate the SAME decision under true τ -> real cost of acting on τ̂
             cost_pred, _ = schedule_cost_under_true_tau(
-                assign_pred, order_pred, tau_true, instance.arrivals, instance.weights
+                assign_pred, order_pred, tau_true, instance.arrivals
             )
 
             # --- Full-information (FI) benchmark: solve under the TRUE τ ---
@@ -94,7 +94,7 @@ def _evaluate_regret(
             assign_fi, order_fi = extract_decision(optmodel)
             # FI cost is the post-hoc optimum (best achievable knowing reality)
             cost_fi, _ = schedule_cost_under_true_tau(
-                assign_fi, order_fi, tau_true, instance.arrivals, instance.weights
+                assign_fi, order_fi, tau_true, instance.arrivals
             )
 
             # regret >= 0 by construction (FI is the best possible cost)
@@ -113,7 +113,7 @@ def train_dfl_blackbox(
 ) -> DFLBlackboxResult:
     """Train a regression module against a real DBAP via blackbox DFL.
 
-    The "loss" is the true weighted completion time of the schedule
+    The "loss" is the true (unweighted) total completion time of the schedule
     produced under predicted τ. Gradients flow back through PyEPO's
     blackbox interpolation.
 
@@ -138,8 +138,6 @@ def train_dfl_blackbox(
     bb_opt = blackboxOpt(
         optmodel, lambd=cfg.blackbox_lambd, processes=cfg.processes
     )
-
-    weights_t = torch.as_tensor(instance.weights, dtype=torch.float32, device=DEVICE)
 
     train_ds = TensorDataset(
         torch.as_tensor(X_inst_train, dtype=torch.float32),
@@ -179,12 +177,13 @@ def train_dfl_blackbox(
             optimizer.zero_grad(set_to_none=True)
             # differentiable solve -> (B, N) start times carrying gradient info
             starts = bb_opt(tau_pred)
-            # DFL loss = realised weighted completion time under the TRUE τ.
+            # DFL loss = realised (unweighted) total completion time under the TRUE τ,
+            # matching the MILP's weight-blind objective and the val regret metric.
             # NOTE: `starts` are the optimizer's own start times under τ̂ (the
             # differentiable surrogate), NOT the feasibility-re-derived starts used
             # for the val regret metric. That asymmetry is intentional in PyEPO:
             # the gradient must flow through the solver's own output.
-            loss = (weights_t * (starts + tau_b)).sum(dim=1).mean()
+            loss = (starts + tau_b).sum(dim=1).mean()
             loss.backward()
             if cfg.grad_clip > 0:
                 # tame the noisy/large gradients blackbox differentiation can produce

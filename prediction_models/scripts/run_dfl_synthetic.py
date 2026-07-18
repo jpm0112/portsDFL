@@ -106,8 +106,7 @@ def _evaluate_decisions(
             assign_pred, order_pred = extract_decision(optmodel)
             # Score that decision under the TRUE times (what would really happen).
             cost_pred, starts_pred = schedule_cost_under_true_tau(
-                assign_pred, order_pred, tau_true,
-                instance.arrivals, instance.weights,
+                assign_pred, order_pred, tau_true, instance.arrivals,
             )
 
             # Solve again with full information (true times) for comparison.
@@ -115,8 +114,7 @@ def _evaluate_decisions(
             optmodel.solve()
             assign_fi, order_fi = extract_decision(optmodel)
             cost_fi, starts_fi = schedule_cost_under_true_tau(
-                assign_fi, order_fi, tau_true,
-                instance.arrivals, instance.weights,
+                assign_fi, order_fi, tau_true, instance.arrivals,
             )
 
             rows.append(
@@ -140,8 +138,8 @@ def _evaluate_decisions(
     df = pd.DataFrame(rows)
     summary = {
         "model": tag,
-        "weighted_cost_pred_decision_mean": df["true_cost_pred_decision"].mean(),
-        "weighted_cost_fi_mean": df["true_cost_fi_decision"].mean(),
+        "cost_pred_decision_mean": df["true_cost_pred_decision"].mean(),
+        "cost_fi_mean": df["true_cost_fi_decision"].mean(),
         "regret_mean": df["regret"].mean(),
         "regret_relative_pct": (
             100.0 * df["regret"].mean() / df["true_cost_fi_decision"].mean()

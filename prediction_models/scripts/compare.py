@@ -141,8 +141,8 @@ def main() -> None:
         dec = pd.read_csv(real_dec_path)
         # Shorten the long column names so the table fits on screen.
         rename = {
-            "weighted_cost_pred_decision_mean": "cost_pred",
-            "weighted_cost_fi_mean": "cost_fi",
+            "cost_pred_decision_mean": "cost_pred",
+            "cost_fi_mean": "cost_fi",
             "regret_mean": "regret",
             "regret_relative_pct": "regret_%",
             "makespan_pred_mean": "make_pred",

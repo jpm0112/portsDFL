@@ -100,8 +100,7 @@ def _evaluate_regret(
             assign_pred, order_pred = extract_decision(optmodel)
             # re-derive feasible starts under reality -> the true cost of acting on τ̂
             cost_pred, _ = schedule_cost_under_true_tau(
-                assign_pred, order_pred, tau_true,
-                instance.arrivals, instance.weights,
+                assign_pred, order_pred, tau_true, instance.arrivals,
             )
 
             # --- Full-information optimum: solve AND evaluate under true τ ---
@@ -109,8 +108,7 @@ def _evaluate_regret(
             optmodel.solve()
             assign_fi, order_fi = extract_decision(optmodel)
             cost_fi, _ = schedule_cost_under_true_tau(
-                assign_fi, order_fi, tau_true,
-                instance.arrivals, instance.weights,
+                assign_fi, order_fi, tau_true, instance.arrivals,
             )
 
             # regret >= 0: extra cost from deciding on τ̂ instead of true τ
@@ -156,10 +154,6 @@ def train_dfl_perturbed(
         seed=cfg.seed,
     )
 
-    weights_t = torch.as_tensor(
-        instance.weights, dtype=torch.float32, device=DEVICE
-    )
-
     train_ds = TensorDataset(
         torch.as_tensor(X_inst_train, dtype=torch.float32),
         torch.as_tensor(tau_inst_train, dtype=torch.float32),
@@ -199,10 +193,11 @@ def train_dfl_perturbed(
             # differentiable solve -> (B, N) start times averaged over the n_samples
             # Gaussian perturbations of τ̂; gradient flows through this
             starts = p_opt(tau_pred)
-            # DFL loss = realised weighted completion under the TRUE τ. As in the
-            # blackbox trainer, `starts` are the optimizer's own (smoothed) start
-            # times, not feasibility-re-derived ones.
-            loss = (weights_t * (starts + tau_b)).sum(dim=1).mean()
+            # DFL loss = realised (unweighted) total completion under the TRUE τ,
+            # matching the MILP's weight-blind objective. As in the blackbox
+            # trainer, `starts` are the optimizer's own (smoothed) start times,
+            # not feasibility-re-derived ones.
+            loss = (starts + tau_b).sum(dim=1).mean()
             loss.backward()
             if cfg.grad_clip > 0:
                 # stabilise these high-variance DFL gradients

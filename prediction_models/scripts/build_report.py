@@ -206,11 +206,11 @@ def _page_title(pdf, data: dict):
         "standard predict-then-optimize (PtO) pipeline against decision-focused\n"
         "learning (DFL) on the discrete Berth Allocation Problem (DBAP). The DBAP\n"
         "is the classical multi-berth scheduling MILP with dynamic arrivals,\n"
-        "weighted completion-time objective, and big-M precedence sequencing.\n"
+        "a total-waiting-time objective, and big-M precedence sequencing.\n"
         "DFL is implemented via PyEPO's Differentiable Black-Box (DBB) method\n"
         "(Pogancic et al., ICLR 2020), which differentiates through the MILP\n"
         "via a perturbation-based interpolation gradient. Predicted service\n"
-        "times enter both the objective and the precedence constraints, which\n"
+        "times enter the precedence constraints (not the objective), which\n"
         "rules out SPO+ but is well-handled by DBB."
     )
     ax.text(0.0, 0.72, "Abstract", fontsize=12, fontweight="bold")
@@ -271,7 +271,8 @@ Decision variables
 
 Objective
 
-      min  Σ_i w_i ( s_i + τ_i )      ← total weighted completion time
+      min  Σ_i ( s_i − a_i )          ← total (unweighted) waiting time
+                                        (= Σ_i (s_i + τ_i) up to a constant)
 
 Constraints
 
@@ -281,15 +282,15 @@ Constraints
    (4)  z_{i,j,b} + z_{j,i,b} ≥ x_{i,b} + x_{j,b} − 1              (must order)
    (5)  s_j ≥ s_i + τ_i − M̂ ( 1 − z_{i,j,b} )                     (precedence)
 
-τ enters constraint (5) as a coefficient on the RHS, not just the objective.
-That places this problem in the "predicted-constraints" DFL setting, which
-SPO+ does not handle but DBB does.
+τ enters only through constraint (5), as a coefficient on the RHS — not the
+objective at all. That places this problem in the "predicted-constraints" DFL
+setting, which SPO+ does not handle but DBB does.
 
 Cascade asymmetry — why DFL has signal here
 
   Under-prediction (τ̂ < τ):  optimizer packs vessels tightly. Reality blows
                               past the planned end-time → next vessel starts
-                              late → cascade of weighted-completion penalties.
+                              late → cascade of completion-time penalties.
   Over-prediction  (τ̂ > τ):  optimizer leaves slack. Reality finishes early.
                               Berth idles briefly. No cascade.
 
@@ -437,7 +438,7 @@ def _page_three_objectives(pdf, data: dict):
     ax_top.plot(x, dfl_s, "s-", color="#1f77b4", label="DFL decision cost",
                 linewidth=1.4, markersize=4)
     ax_top.set_xlabel("Validation instance (sorted by FI cost)")
-    ax_top.set_ylabel("Realised cost under true τ\n(weighted completion time)")
+    ax_top.set_ylabel("Realised cost under true τ\n(total completion time)")
     ax_top.legend(loc="upper left", fontsize=9)
     ax_top.grid(alpha=0.3)
     ax_top.set_title("All three curves are realised costs under the true τ")
@@ -539,8 +540,8 @@ def _page_decision_quality(pdf, data: dict):
     # Pairs of (raw CSV column name, friendly header). We only keep columns that exist.
     keep = [
         ("model", "Model"),
-        ("weighted_cost_pred_decision_mean", "cost (pred)"),
-        ("weighted_cost_fi_mean", "cost (FI)"),
+        ("cost_pred_decision_mean", "cost (pred)"),
+        ("cost_fi_mean", "cost (FI)"),
         ("regret_mean", "regret"),
         ("regret_relative_pct", "regret %"),
         ("makespan_pred_mean", "makespan"),
@@ -569,7 +570,7 @@ def _page_decision_quality(pdf, data: dict):
         ("regret_relative_pct", "regret %"),
         ("makespan_pred_mean", "makespan"),
         ("mean_wait_pred", "mean wait"),
-        ("weighted_cost_pred_decision_mean", "cost"),
+        ("cost_pred_decision_mean", "cost"),
     ]:
         if k in dec.columns and len(dec) >= 2:
             # Assumes exactly one PtO row and one DFL row exist.
