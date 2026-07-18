@@ -99,6 +99,10 @@ def _evaluate_regret(
 
             # regret >= 0 by construction (FI is the best possible cost)
             regrets.append(cost_pred - cost_fi)
+    if not regrets:
+        # np.mean([]) -> nan would silently disable early stopping (best_val_regret
+        # stays inf, no epoch ever "improves"). An empty val set is a config error.
+        raise ValueError("No validation instances to evaluate regret on.")
     return float(np.mean(regrets))
 
 

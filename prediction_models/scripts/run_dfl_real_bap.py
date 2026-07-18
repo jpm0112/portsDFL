@@ -192,14 +192,17 @@ def _evaluate_decisions(
             overlap_pct.append(overlap)
 
     df = pd.DataFrame(rows)
+    fi_mean = df["true_cost_fi_decision"].mean()
     summary = {
         "model": tag,
         "cost_pred_decision_mean": df["true_cost_pred_decision"].mean(),
-        "cost_fi_mean": df["true_cost_fi_decision"].mean(),
+        "cost_fi_mean": fi_mean,
         "regret_mean": df["regret"].mean(),
         # Mean regret as a % of the optimal cost (lower is better).
-        # NOTE: if the FI cost mean is 0 this divides by zero -> inf/nan (see review).
-        "regret_relative_pct": 100.0 * df["regret"].mean() / df["true_cost_fi_decision"].mean(),
+        # Guard the FI-mean==0 degenerate case (would be inf/nan otherwise).
+        "regret_relative_pct": (
+            100.0 * df["regret"].mean() / fi_mean if fi_mean else float("nan")
+        ),
         "makespan_pred_mean": df["makespan_pred"].mean(),
         "makespan_fi_mean": df["makespan_fi"].mean(),
         "mean_wait_pred": df["wait_pred"].mean(),

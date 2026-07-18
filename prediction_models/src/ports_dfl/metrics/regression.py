@@ -65,12 +65,14 @@ def summarize_folds(fold_metrics: list[dict[str, float]]) -> pd.DataFrame:
     """
     df = pd.DataFrame(fold_metrics)
     df.index = [f"fold_{i}" for i in range(len(df))]
+    # ddof=1 is the sample std (divide by N-1), which is NaN for a single fold
+    # (N-1 = 0). Fall back to the population std (0.0 for one fold) so the summary
+    # row stays numeric.
+    std_ddof = 1 if len(df) > 1 else 0
     summary = pd.DataFrame(
         {
             "mean": df.mean(axis=0),
-            # ddof=1 is the sample std (divide by N-1); with a single fold this
-            # yields NaN (N-1 = 0). See REPORTED.
-            "std": df.std(axis=0, ddof=1),
+            "std": df.std(axis=0, ddof=std_ddof),
         }
     ).T
     return pd.concat([df, summary], axis=0)

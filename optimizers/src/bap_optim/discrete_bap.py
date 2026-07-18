@@ -85,9 +85,10 @@ variations:
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pyomo.environ as pyo
-from pyepo import EPO  # NOTE: imported but unused in this file (see review)
 from pyepo.model.omo.omomodel import optOmoModel
 from pyomo.opt import TerminationCondition
 
@@ -107,12 +108,18 @@ def generate_bap_instance(
     horizon_hours: float = 200.0,
     seed: int = 0,
     arrival_density: float = 0.7,
+    service_time_ub: float | None = None,
 ) -> BAPInstance:
     """Generate a synthetic homogeneous BAP instance (no windows/compat).
 
     Vessels arrive uniformly over a fraction of the horizon (so the system
     is busy and decisions matter), with weights drawn from a log-normal so
     a few high-priority vessels create real prioritization signal.
+
+    Args:
+        service_time_ub: upper bound on any single vessel's service time τ,
+            used only to size big-M. τ itself is supplied later via ``setObj``.
+            Defaults to ``horizon_hours`` (a conservative per-vessel cap).
     """
     rng = np.random.default_rng(seed)
     # Squeeze all arrivals into a fraction of the horizon so berths stay busy.
@@ -123,8 +130,12 @@ def generate_bap_instance(
     # Normalise so the average weight is 1, keeping objective magnitudes
     # comparable across instances of different sizes.
     weights = weights / weights.mean()
-    # big-M: larger than any realistic schedule span, to switch off precedence.
-    big_m = float(horizon_hours + 400.0)
+    # big-M must dominate the largest berth completion time so an "off" precedence
+    # (z=0) is vacuous. Worst case is all N vessels queued at one berth:
+    # max_arrival + N·τ_ub. A fixed horizon+const does NOT scale with N and can
+    # silently cut valid schedules (instance.py documents this invariant).
+    tau_ub = float(horizon_hours if service_time_ub is None else service_time_ub)
+    big_m = float(arrivals.max() + n_vessels * tau_ub)
     return BAPInstance(
         n_vessels=n_vessels,
         n_berths=n_berths,
@@ -223,11 +234,22 @@ class DiscreteBAP(optOmoModel):
             )
         self._model.obj = pyo.Objective(expr=obj_expr, sense=pyo.minimize)
 
-        # Gurobi-friendly options; other solvers ignore unrecognised keys.
-        if hasattr(self._solverfac, "options"):
-            self._solverfac.options["MIPGap"] = 0.0       # require provable optimality
-            self._solverfac.options["TimeLimit"] = 60     # safety guard: solve() raises if hit
-            self._solverfac.options["OutputFlag"] = 0     # silence solver logging
+        # These option keys are Gurobi-specific. On another solver they would be
+        # silently ignored, leaving the gap at the solver default — so solve()
+        # could accept a non-optimal incumbent as "optimal" and make regret noisy
+        # or negative. Only apply them for Gurobi; warn otherwise.
+        if self.solver_name == "gurobi":
+            if hasattr(self._solverfac, "options"):
+                self._solverfac.options["MIPGap"] = 0.0   # require provable optimality
+                self._solverfac.options["TimeLimit"] = 60  # safety guard: solve() raises if hit
+                self._solverfac.options["OutputFlag"] = 0  # silence solver logging
+        else:
+            warnings.warn(
+                f"Solver {self.solver_name!r} is not Gurobi: the MIPGap=0 "
+                "exactness guarantee is not enforced, so regret may be noisy or "
+                "negative. Use gurobi for DFL/regret experiments.",
+                stacklevel=2,
+            )
 
     @property
     def num_cost(self) -> int:
@@ -572,13 +594,18 @@ def derive_starts_under_true_tau(
     benchmark uses true τ both inside the MILP and for evaluation, so its
     realised cost is by definition the lowest achievable.
 
-    NOTE: this re-derivation is window/compatibility agnostic — it only
+    NOTE: this re-derivation is window/compatibility/channel agnostic — it only
     enforces arrival lower bounds and per-berth precedence. Service-window
     feasibility is enforced inside the MILP (hard mode) or penalised in the
     objective (soft mode); it is intentionally not re-imposed here, so for
     windowed instances the DFL regret is computed against the realised
     start times without an extra window penalty. (If window-aware regret is
     needed, fold the tardiness penalty into the trainer's loss as well.)
+    Likewise the navigation channel's single-transit serialisation is NOT
+    re-imposed, so on channel instances (``channel_time`` set) both the
+    predicted and FI costs under-count channel congestion equally — the regret
+    is channel-agnostic. The DFL run scripts never set ``channel_time``, so this
+    is dormant there; it matters only if the channel is enabled during learning.
 
     Args:
         assignment: shape (N, B), x[i,b] ∈ {0,1}.

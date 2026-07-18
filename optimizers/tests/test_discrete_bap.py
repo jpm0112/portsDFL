@@ -3,8 +3,13 @@
 import numpy as np
 import pytest
 
-# NOTE: hard-imports Pyomo/PyEPO/Gurobi via discrete_bap; collection fails if the
-# solver stack is missing (see review note re: guarding with pytest.importorskip).
+# The MILP tests need the full solver stack (Pyomo + PyEPO, and Gurobi at solve
+# time). Skip this module cleanly if any piece is absent, rather than failing
+# collection with an ImportError.
+pytest.importorskip("pyomo", reason="Pyomo required for MILP tests")
+pytest.importorskip("pyepo", reason="PyEPO required for MILP tests")
+pytest.importorskip("gurobipy", reason="Gurobi required to solve the MILP")
+
 from bap_optim.discrete_bap import (
     DiscreteBAP,
     derive_starts_under_true_tau,
