@@ -1,0 +1,197 @@
+\section{Methodology}\label{sec:method}
+
+We frame berth scheduling as a decision made under an uncertain service time and
+ask how a predictor of that service time should be trained. The scheduler is a
+discrete berth allocation model (Section~\ref{sec:milp}) whose only uncertain
+input is the berth-occupation time of each vessel. A predictor supplies that
+input from pre-berthing features (Section~\ref{sec:predictors}). The
+methodological contribution is the training objective for that predictor: rather
+than fit the service time in isolation, we train it against the downstream cost
+of the schedule it induces (Section~\ref{sec:dfl}). The mechanism that motivates
+this choice is a \emph{cascade asymmetry}. Under-predicting a vessel's service
+time leads the optimizer to pack the following vessel too early; when the true
+service time is realized, the overlap propagates as a chain of delays down the
+berth queue. Over-predicting only leaves a berth briefly idle and does not
+cascade. A squared-error loss treats the two errors symmetrically. A
+decision-focused loss does not, because it scores the realized schedule.
+
+\subsection{Discrete berth allocation model}\label{sec:milp}
+
+We adopt the discrete formulation of the berth allocation problem (BAP), in which
+the quay is partitioned into a finite set of berths and at most one vessel
+occupies a berth at any time \citep{imai2001dynamic, buhrkal2011models}. The
+discrete variant matches the terminal under study, whose quay is operated as a
+fixed set of numbered berths with vessel-specific compatibility, and it keeps the
+assignment and precedence structure that the decision-focused gradients later
+exploit. Let
+$I=\{1,\dots,N\}$ be the vessels to be scheduled in the planning week and
+$B=\{1,\dots,B\}$ the berths. Each vessel $i$ is compatible with a subset
+$B_i\subseteq B$ of berths, determined by draft, length, and cargo type; an
+assignment to $b\notin B_i$ is forbidden, which we impose by restricting the
+assignment variables rather than through side constraints
+\citep{alzaabi2016berth}. A distinguished subset $S\subseteq I$ of priority
+service vessels carries fixed reservations and is excluded from the optimized
+objective. Each vessel $i$ has an arrival time $a_i$ and a berth-occupation
+(service) time $\tau_i$. For $i\notin S$ the service time is \emph{predicted},
+$\tau_i=\hat\tau_i$; for a reserved vessel $r\in S$ it is fixed at its declared
+duration $D_r$. A single navigation channel of transit time $c$ may connect the
+anchorage to the berths; setting $c=0$ recovers the berth-only model.
+
+The decision variables are the assignment $x_{ib}\in\{0,1\}$, defined only for
+$b\in B_i$; the berth start time $s_i\ge a_i$; and the pairwise precedence
+$z_{ijb}\in\{0,1\}$, equal to $1$ when vessel $i$ precedes vessel $j$ at berth $b$.
+When the channel is active we add channel-entry and channel-exit times
+$e^{\text{in}}_i,e^{\text{out}}_i$ and a transit-order variable $y_{ij}$.
+
+The default objective minimizes total unweighted waiting time,
+\begin{equation}\label{eq:obj}
+\min \; \sum_{i\in I\setminus S}\bigl(s_i-a_i\bigr),
+\end{equation}
+where the channel-entry time $e^{\text{in}}_i$ replaces $s_i$ when the channel is
+active. An equivalent berth-idle form, $\min\sum_{b\in B}(\mathrm{LC}_b-\mathrm{FS}_b)$
+over the last completion $\mathrm{LC}_b$ and first start $\mathrm{FS}_b$ at each
+berth, yields the same optimizer. Because arrival times are data, unweighted
+waiting equals total completion $\sum_{i}(s_i+\tau_i)$ up to an additive
+constant; we exploit this identity in Section~\ref{sec:dfl}. The objective is
+deliberately unweighted. Priority weights, which would place a per-vessel cost
+vector in front of the completion terms, are left to future work.
+
+The constraints are as follows. Each vessel is assigned to exactly one compatible
+berth,
+\begin{equation}\label{eq:assign}
+\sum_{b\in B_i} x_{ib}=1 \qquad \forall i\in I .
+\end{equation}
+A vessel cannot start before it arrives,
+\begin{equation}\label{eq:release}
+s_i \ge a_i \qquad \forall i\in I .
+\end{equation}
+No two vessels overlap at a shared berth. For each pair $\{i,j\}$ and each berth
+$b\in B_i\cap B_j$,
+\begin{align}
+z_{ijb}+z_{jib} &\le 1, \label{eq:prec-one}\\
+z_{ijb}+z_{jib} &\ge x_{ib}+x_{jb}-1, \label{eq:prec-active}\\
+s_j &\ge s_i + \tau_i - M\,(1-z_{ijb}), \label{eq:prec-bigm}
+\end{align}
+so that whenever $i$ and $j$ share berth $b$ exactly one ordering is selected
+(\ref{eq:prec-one})--(\ref{eq:prec-active}) and the successor cannot start until
+the predecessor's service is complete (\ref{eq:prec-bigm}). Priority
+reservations hold a fixed berth interval with no backfill,
+\begin{equation}\label{eq:reserve}
+s_r = R_r, \quad \tau_r = D_r \qquad \forall r\in S .
+\end{equation}
+The optional shared channel enforces the transit time and prevents two transits
+from overlapping,
+\begin{align}
+s_i &\ge e^{\text{in}}_i + c, \qquad e^{\text{out}}_i \ge s_i + \tau_i, \label{eq:chan-time}\\
+e^{\text{in}}_j &\ge e^{\text{out}}_i - M\,(1-y_{ij}), \qquad y_{ij}+y_{ji}\le 1, \label{eq:chan-order}
+\end{align}
+which reduces to the berth-only model at $c=0$.
+
+Constraints (\ref{eq:prec-bigm}) and (\ref{eq:chan-time})--(\ref{eq:chan-order})
+carry the methodological weight of this section. The predicted service time
+$\hat\tau_i$ does not enter the model as a linear cost coefficient in the
+objective; it enters the big-$M$ \emph{constraints} that fix when the following
+vessel may start. A prediction error therefore shifts the feasible region rather
+than merely rescaling the objective, which is precisely the setting that dictates
+the gradient choice in Section~\ref{sec:dfl}. The precedence and completion
+structure follows the discrete BAP family of \citet{cordeau2005berth} and
+\citet{buhrkal2011models}. The big-$M$ is sized as $\max_i a_i + N\cdot\bar\tau$,
+where $\bar\tau$ is an upper bound on any single service time, so that
+$M$ dominates the worst-case completion of the queue and never truncates a
+feasible schedule. The model is built in Pyomo and solved with Gurobi to proven
+optimality (MIPGap set to $0$), so that any suboptimality in the realized
+schedule is attributable to the predicted input rather than to the solver.
+
+\subsection{Service-time prediction}\label{sec:predictors}
+
+The predictor $f_\theta$ maps a vector of pre-berthing features $x$, available
+before the vessel is scheduled, to an estimated service time $\hat\tau=f_\theta(x)$.
+We benchmark a model zoo under $5$-fold cross-validation stratified by berth
+(\emph{Sitio}), so that each fold preserves the berth composition of the full
+sample. Hyperparameters are tuned with Optuna using the tree-structured Parzen
+estimator, allotting $100$ trials to the tree ensembles and $40$ to the neural
+models. A fresh preprocessor is fit on the training partition of each fold and
+applied to the held-out partition, so no target or scaling information leaks
+across the split.
+
+The zoo spans four families. A linear ridge-regularized head serves both as a
+baseline and as the shared backbone for the decision-focused experiments below.
+The gradient-boosted and bagged trees comprise random forest, XGBoost, and
+LightGBM. The tabular deep-learning models are RealMLP \citep{holzmuller2024realmlp},
+TabM \citep{gorishniy2025tabm}, and NODE \citep{popov2020node}. Global-mean and
+group-mean (per-berth) predictors provide the naive reference points. For the
+controlled comparison between predict-then-optimize and decision-focused learning
+in Section~\ref{sec:dfl}, only the linear head is carried into both arms. Holding
+the architecture fixed across arms ensures that any difference in downstream
+schedule cost is attributable to the training loss and not to model capacity.
+
+\subsection{Decision-focused learning}\label{sec:dfl}
+
+The conventional pipeline is predict-then-optimize (PtO): fit $f_\theta$ by
+minimizing the mean squared error
+\begin{equation}\label{eq:mse}
+\mathcal{L}_{\text{PtO}}(\theta) = \sum_{i\in I}\bigl\|\hat\tau_i-\tau_i\bigr\|^2 ,
+\end{equation}
+then pass the point predictions to the MILP of Section~\ref{sec:milp}. The two
+stages are trained and executed independently, so the predictor never observes
+the schedule its errors produce.
+
+We measure schedule quality by \emph{regret}. Given predictions $\hat\tau$, we
+solve the MILP to obtain a decision $(x,z)$, that is, the berth assignment and
+the precedence order. We then lock that assignment and order and re-derive
+feasible start times under the \emph{true} service times $\tau$ by greedy
+earliest-start packing along each berth's fixed order, and score the realized
+schedule at its true completion. This evaluation mirrors terminal practice: once
+a vessel is committed to a berth and a position in the queue, the assignment and
+order are held while the actual start times float to absorb the realized service
+durations. The realized cost is
+
+\begin{equation}\label{eq:cost}
+C = \sum_{i\in I}\bigl(s_i+\tau_i\bigr).
+\end{equation}
+Regret is the excess of this realized cost over the full-information cost,
+\begin{equation}\label{eq:regret}
+\mathrm{Regret} = C_{\text{method}} - C_{\text{FI}},
+\end{equation}
+where $C_{\text{FI}}$ is obtained by solving the MILP directly under the true
+$\tau$. Regret is nonnegative under the present objective. Because unweighted
+waiting equals total completion (\ref{eq:cost}) up to a constant, the
+full-information decision is the exact minimizer of the scored cost, so every
+alternative decision re-derives to a cost of at least $C_{\text{FI}}$. We
+verified this property both analytically and by brute-force enumeration over
+small instances. We note that the nonnegativity of regret is tied to the
+unweighted objective and would require re-examination once priority weights are
+introduced.
+
+Decision-focused learning (DFL) replaces the surrogate loss (\ref{eq:mse}) with
+the realized schedule cost itself. Let $s^\star$ denote the start times the solver
+produces when it optimizes under the predicted $\hat\tau$. The DFL loss evaluates
+those solver-chosen start times at the true service times,
+\begin{equation}\label{eq:dfl}
+\mathcal{L}_{\text{DFL}}(\theta) = \sum_{i\in I}\bigl(s^\star_i+\tau_i\bigr),
+\end{equation}
+and is backpropagated through the MILP into $\theta$. The loss rewards
+predictions that yield schedules which remain cheap once reality is realized,
+which is exactly the property the cascade asymmetry makes MSE blind to.
+
+The gradient of (\ref{eq:dfl}) must pass through the argmin of a mixed-integer
+program. Because $\hat\tau$ enters the big-$M$ \emph{constraints}
+(\ref{eq:prec-bigm}) and (\ref{eq:chan-time})--(\ref{eq:chan-order}) rather than
+a linear objective cost vector, the SPO+ surrogate \citep{elmachtoub2022spo},
+which is derived for uncertain objective coefficients, does not apply directly.
+We therefore use solver-differentiation methods that require only black-box
+solver calls on perturbed inputs. Blackbox differentiation
+\citep{pogancic2020blackbox} constructs an informative gradient from a single
+interpolation strength $\lambda$ and two solves per training step. Perturbed
+optimizers \citep{berthet2020learning} smooth the argmin with Gaussian
+perturbations of the input and average over $K$ samples. Both are implemented
+through PyEPO \citep{tang2024pyepo}. The alternative family for
+predictions-in-constraints is implicit differentiation through relaxed
+optimization layers \citep{amos2017optnet, wilder2019melding, ferber2020mipaal};
+we did not adopt it here on grounds of computational cost and scalability to the
+discrete BAP. For the broader landscape of decision-focused training we refer to
+the surveys of \citet{mandi2024decision} and \citet{kotary2021end}, and for the
+specific and less-developed case of predicted parameters entering constraints to
+\citet{hu2023twostage} and \citet{mandi2025feasibility}. Each DFL model is
+warm-started from the trained PtO weights of the shared linear head, so the only
+difference between the two arms is the training loss.

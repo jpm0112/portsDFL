@@ -1,0 +1,129 @@
+\section{Problem setting and data}\label{sec:problem}
+
+\subsection{Operational context}\label{sec:context}
+
+The application that motivates this work is berth planning at the Port of San
+Antonio, Chile. The port comprises five terminals, DP World, STI, PANUL, QC and
+EPSA, each of which plans its own berth schedule independently but all of which
+share a single port-entry navigation channel. A schedule assigns each incoming
+vessel to a compatible berth and to a start time, with the aim of reducing vessel
+waiting and improving berth utilization. This is the berth allocation problem
+(BAP), for which the operations research literature offers a mature taxonomy of
+discrete and continuous formulations \citep{bierwirth2010survey}. The load-bearing
+input to any such schedule is the expected service time: how long each vessel will
+occupy its berth. A planner cannot decide when the next vessel may enter a berth
+without an estimate of when the current occupant will leave, so the quality of the
+schedule is bounded by the quality of that estimate.
+
+Berths are heterogeneous. Some accept only particular cargoes, most plainly the
+liquid-bulk berth, which serves liquid-bulk vessels alone, and others are
+constrained by vessel draft and length. Rather than encode these restrictions from
+a berth specification sheet, we derive the vessel-to-berth compatibility matrix
+from the data, treating a terminal and vessel-type pair as compatible when it
+co-occurs in the historical record. A subset of calls that the port designates
+\emph{service} vessels, its own term for committed or priority calls, carry a hard
+no-wait reservation: they are entitled to berth on arrival. Enforcing that
+guarantee as a hard constraint can render a weekly instance infeasible whenever a
+predicted service time pushes a reserved berthing window past its arrival. Because
+our training procedure must solve the scheduling model repeatedly under many
+different predicted service times, we relax the guarantee during training to a soft
+tardiness penalty on reserved vessels, which keeps every solve feasible while
+preserving the priority these calls are owed. Planning is carried out one calendar
+week at a time; the optimizer receives a fixed seven-day set of calls and does not
+roll its horizon forward as new information arrives.
+
+The service time a schedule depends on is one segment of a longer port call, and
+naming that segment precisely matters for what the predictor is asked to learn. A
+call proceeds through arrival at the anchorage, pilot boarding, mooring, cargo
+operations, unmooring and departure. The two early stages have very different
+character. Waiting at anchorage can last days, especially for dry-bulk vessels,
+whose time at anchor has a median of about 207~hours in our records; this waiting
+is largely a consequence of congestion and berth availability rather than a
+property of the vessel. Pilot boarding, by contrast, marks the actual entry to the
+port and is followed by a transit to the first mooring that is
+consistent across calls, about 42~minutes. The berth-occupation stage that begins at mooring is
+what the schedule commits berth capacity to, and it is what we predict. Prediction
+of this quantity matters precisely because it is the input on which the rest of the
+plan is built, and because its errors do not stay local. An under-estimate leads
+the optimizer to admit the following vessel too early, and the resulting overlap
+propagates down the berth queue; an over-estimate merely leaves a berth idle for a
+while. We develop this \emph{cascade asymmetry} and its consequences for the
+training objective in Section~\ref{sec:method}; here it is enough to note that
+service-time errors are both consequential and asymmetric in their effect.
+
+\subsection{Data}\label{sec:data}
+
+Our data come from a vessel-calls workbook maintained by the port, covering
+December~2019 through August~2025. The raw file holds 5{,}605 calls, which we clean
+to 5{,}597 usable records by removing entries with inconsistent or missing
+timestamps. Each record describes one call: the terminal and berth used, the
+vessel and its attributes, the ports of origin and destination, the commercial
+service, and the timestamps that bound each stage of the call. The port records
+sixteen distinct vessel types, which we collapse into seven groups for modelling:
+Container, Dry Bulk, Vehicle Carrier, Liquid Bulk, General Cargo, Passenger and a
+residual Other. Container calls are the most frequent and occupy a berth for about
+36~hours on average; dry-bulk calls are the longest at roughly 74~hours; vehicle
+carriers average about 36~hours and liquid-bulk calls about 22~hours. These group
+averages differ enough to make vessel type an informative feature, but they also
+conceal wide within-group variation that a point estimate must confront.
+
+The prediction target is the berth-occupation time, denoted $\tau$ and measured in
+hours. We define it as the interval between the first mooring and the last
+unmooring of a call, so that it captures the full time the vessel holds the berth,
+including cargo operations and any idle time between them, and excludes both the
+anchorage wait that precedes entry and the channel transit that precedes mooring.
+The empirical distribution of $\tau$ is strongly right-skewed: most calls are
+short, a long tail of calls is very long, and this shape informs both the choice of
+error measure and the model families we consider in Section~\ref{sec:method}.
+
+The predictor may use only information available before the vessel berths, since a
+service-time estimate that relied on post-berthing data could not be produced when
+the schedule is built. Our feature table has seventeen such features. Several are
+recorded directly: the berth or site (\emph{Sitio}), the vessel-type group, a
+COVID-era indicator marking the period of disrupted operations, the gross tonnage
+(TRG), the arrival draft, and a draft difference. The timing of the berthing
+decision enters through cyclical encodings, the sine and cosine of the berthing
+hour, day of week, and month, which let the model represent daily, weekly and
+seasonal patterns without imposing an artificial discontinuity at the wrap-around.
+The remaining features are high-cardinality categoricals, namely the origin and
+destination ports, the service route, the shipping line, and the agency, which we
+encode by target encoding rather than one-hot expansion.
+
+Because several features summarize a vessel's own history or its group's recent
+behaviour, feature engineering is where target leakage is most likely to enter, and
+we construct these features causally. Per-vessel historical statistics are computed
+over an expanding window shifted by one visit, so that a given row sees only that
+vessel's earlier calls and never its current or future ones. Cross-vessel group
+averages are computed under the same discipline: for a call being scheduled, a
+group average includes only same-group calls whose service had already been
+completed before the current vessel's berthing decision, never calls still in
+progress or yet to arrive. Timestamps that would reveal the label are held out of
+the training table entirely. Together these rules aim to reproduce, at training
+time, exactly the information a planner would hold at the moment the schedule is
+built.
+
+\subsection{Limitations of the data}\label{sec:datalimits}
+
+Three features of the data deserve to be stated plainly, because a careful reader
+should weigh them as threats to the validity of what follows. First, the
+draft-difference feature is computed as arrival draft minus departure draft, and the
+departure draft is known only after the vessel has finished loading or discharging,
+that is, after the service whose duration we are trying to predict. This feature is
+therefore a suspected source of target leakage, and to the extent the models lean on
+it the reported predictive accuracy may be optimistic. We flag this explicitly as an
+open issue requiring verification and a leakage-free re-fit that either removes the
+feature or replaces it with a pre-berthing proxy. Second, the exact
+feature-engineered training table used to fit the models is not fully reproducible
+from the released pipeline scripts, so an independent researcher could reconstruct
+the procedure but not necessarily the identical inputs. Third, the underlying
+vessel-call data are proprietary to the port and cannot be released publicly, which
+limits external replication to the code and the aggregate statistics reported here.
+None of these is disqualifying, but each bounds how strongly the empirical results
+should be read, and we return to the leakage concern in particular when interpreting
+model performance.
+
+Finally, we note a gap in the literature that this study begins to address. Machine
+learning models for vessel service and turnaround times have been studied in other
+port systems \citep{yan2024predicting, chu2025vessel}, but we are not aware of prior
+machine learning work on service-time prediction for Chilean ports specifically. The
+present study is, to our knowledge, a first step in that direction.

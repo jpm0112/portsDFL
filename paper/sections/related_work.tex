@@ -1,0 +1,56 @@
+\section{Related work}\label{sec:related}
+
+Our study sits at the intersection of three literatures: classical formulations of the berth allocation problem (BAP), machine learning for the prediction of vessel service and arrival times, and decision-focused learning (DFL) for predict-then-optimize pipelines. We review each in turn and then position our contribution against representative prior work.
+
+\subsection{The berth allocation problem}\label{sec:related-bap}
+
+The BAP assigns arriving vessels to berthing positions and times along a quay so as to optimize a service-quality objective. The literature is conventionally organized along two axes introduced in the surveys of \citet{bierwirth2010survey} and updated by \citet{bierwirth2015followup}: a spatial dimension that distinguishes discrete, continuous, and hybrid quay representations, and a temporal dimension that distinguishes static problems, in which all vessels are present at the start of the planning horizon, from dynamic problems, in which vessels arrive over time. Recent reviews confirm that this taxonomy remains the reference frame for the field and document its extensions toward integrated and data-rich settings \citep{li2023stateoftheart, makhado2025systematic}.
+
+The discrete dynamic BAP was cast as a mixed-integer program by \citet{imai2001dynamic}, whose assignment-based formulation minimizes total waiting and handling time under vessel-dependent service times. \citet{cordeau2005berth} recast the problem as a multi-depot vehicle routing problem with time windows, in which each berth is a depot and each vessel a customer, and minimize a weighted sum of service completion times; the resulting precedence structure, in which vessels served at the same berth are sequenced by binary ordering variables, underlies the model we adopt. \citet{golias2007berth} introduced soft time windows and deadlines so that early or late service is penalized rather than forbidden, and \citet{alzaabi2016berth} added compatibility restrictions that forbid particular vessel-to-berth assignments through valid inequalities. Priority among vessels has been treated explicitly by \citet{Ursavas2022PriorityControlBAP}, who controls service order through contractual priority classes. A parallel thread has compared the computational behavior of alternative discrete formulations, establishing which model families scale to realistic instances \citep{buhrkal2011models, guan2004berth, kim2003berth, lim1998berth}.
+
+Our optimization model belongs squarely to this classical family. It is a discrete, dynamic BAP over a weekly horizon, formulated with the sequencing and precedence variables of the weighted-completion recast of \citet{cordeau2005berth} and equipped with the forbidden-assignment logic of \citet{alzaabi2016berth} through a data-driven berth compatibility matrix. It departs from prior formulations in two operational respects: a hard no-wait priority class, which must be served without delay, and berth compatibility inferred from historical assignments rather than fixed a priori. We stress, however, that our contribution is not a new constraint. The formulation is deliberately conventional; the novelty lies in how its parameters are produced, namely by a service-time predictor trained end-to-end against the schedule it induces.
+
+\subsection{The berth allocation problem under uncertainty and machine learning for port operations}\label{sec:related-uncertainty}
+
+Vessel arrival and handling times are uncertain, and the BAP has accordingly been studied under stochastic and robust optimization, which hedge against distributional or worst-case realizations of these quantities \citep{rodrigues2022uncertainty}. In parallel, a substantial machine learning literature now predicts the temporal quantities on which berth planning depends. Models have been proposed for service time \citep{yan2024predicting}, turnaround time \citep{chu2024vessel}, dwell time \citep{yoon2023comparative}, berthing time \citep{pham2025berthing}, arrival time and estimated time of arrival \citep{chu2025vessel, jiang2025review}, and port congestion and waiting time \citep{choi2025waiting}; broader surveys situate these efforts within intelligent port scheduling \citep{lv2025intelligent}.
+
+A recurring feature of this literature is the two-stage, predict-then-use design. The predictor is trained to minimize a forecasting loss such as mean absolute error or root mean squared error, and its point estimates are then passed to a downstream scheduling model that treats them as if they were exact. \citet{kolley2023robust} feed machine-learned arrival predictions into a robust berth scheduling model, and \citet{chu2025integrating} and \citet{zhang2025dynamic} wire arrival forecasts into BAP optimization; in every case the two stages are trained separately. The consequence is a well-understood misalignment: the forecasting loss weights all prediction errors by statistical magnitude, whereas the scheduling cost weights them by their downstream effect on the berth plan, and the two orderings need not agree. A one-hour underestimate of the service time of a vessel that determines the start of every subsequent berth occupancy is far more costly than the same error on a vessel served last at an otherwise idle berth, yet a forecasting loss penalizes both equally. To our knowledge, no work in this literature trains the predictor to minimize the cost of the decisions it induces rather than its own forecasting error.
+
+\subsection{Decision-focused learning and predict-then-optimize}\label{sec:related-dfl}
+
+Decision-focused learning addresses exactly this misalignment. Its premise is that minimizing prediction error is not the same as minimizing decision error, and that a predictor feeding an optimization model should be trained on the regret of the resulting decisions. The idea was formalized for linear objectives by \citet{elmachtoub2022spo}, whose Smart Predict-then-Optimize (SPO) framework and its convex surrogate SPO+ minimize decision regret directly; recent surveys map the resulting field \citep{mandi2024decision, kotary2021end, sadana2025survey}.
+
+The central technical obstacle is differentiating through the argmin of an optimization problem. Several lines of work address it. Differentiable optimization layers backpropagate through convex programs and quadratic programs \citep{amos2017optnet, agrawal2019differentiable}. For combinatorial and integer problems, where the mapping from parameters to solutions is piecewise constant and therefore has zero gradient almost everywhere, alternatives include continuous relaxation of the decision layer \citep{wilder2019melding}, treating a mixed-integer program as a differentiable layer \citep{ferber2020mipaal}, black-box differentiation that constructs an informative surrogate gradient by perturbing the objective and re-solving \citep{pogancic2020blackbox}, and perturbed optimizers that smooth the argmin through stochastic perturbation \citep{berthet2020learning}. The PyEPO library consolidates several of these estimators for end-to-end training \citep{tang2024pyepo}. Our approach uses black-box solver differentiation in the sense of \citet{pogancic2020blackbox}, which imposes no structural requirement on the solver and therefore accommodates the integer precedence structure of our BAP.
+
+An important restriction runs through most of this work: predictions are assumed to enter the linear objective as a cost vector, so that the feasible region is fixed and only its ranking over solutions changes with the prediction. When the predicted quantity instead enters the constraints, the feasible region itself moves with the prediction, and the analysis is considerably harder and far less developed \citep{hu2023twostage, mandi2025feasibility}. Applications of DFL to scheduling, routing, and other combinatorial tasks have nonetheless accumulated \citep{mandi2020smart, shi2023decision, wilder2019melding}, though predominantly in the objective-cost-vector setting.
+
+\subsection{Decision-focused learning in transportation and maritime operations}\label{sec:related-gap}
+
+DFL and predict-then-optimize have begun to reach transportation and logistics. Applications include ride-hailing subsidy allocation \citep{yang2025ridehailing}, SPO for maritime transportation \citep{tian2023smart}, just-in-time vessel arrival planning with an asymmetric penalty for arriving early versus late \citep{sheng2026jit}, and seaport power-logistics coordination trained in a decision-focused manner \citep{pu2025predictthenoptimize}. The underlying intuition, that a prediction error propagates asymmetrically through a downstream schedule and should be penalized by its cascade cost rather than its magnitude, is longstanding in scheduling under uncertainty \citep{herroelen2005project, fu2024robustifying}.
+
+These strands leave a clear gap. DFL has been applied to arrival prediction, to shore-power coordination, and to adjacent maritime planning problems, but not to berth allocation, and the predicted quantity has almost always entered a linear objective rather than the scheduling constraints. We fill this gap on both counts. To our knowledge, this is the first application of decision-focused learning to the berth allocation problem, and the predicted service time enters the precedence constraints of the BAP rather than a linear objective cost, placing our problem in the harder and less-studied prediction-in-constraints regime of \citet{hu2023twostage} and \citet{mandi2025feasibility}. Because the predicted service time controls when a berth becomes free for the next vessel, an error shifts the feasible schedule rather than merely re-ranking a fixed set of schedules, which is precisely the setting the cost-vector methods of \citet{elmachtoub2022spo} were not designed for. Table~\ref{tab:related} contrasts our model with representative prior BAP formulations along the dimensions most relevant to this contribution.
+
+\begin{table}[htbp]
+\centering
+\caption{Representative berth allocation formulations contrasted with the present work.}
+\label{tab:related}
+\small
+\begin{tabular}{@{}llllll@{}}
+\toprule
+Reference & Model type & Objective & Priority handling & Berth compatibility & Prediction / DFL \\
+\midrule
+\citet{imai2001dynamic} & Discrete dynamic MILP & Waiting + handling time & None & None & None \\
+\citet{cordeau2005berth} & Discrete MDVRPTW recast & Weighted completion & None & Time windows & None \\
+\citet{golias2007berth} & Discrete dynamic MILP & Soft deadline penalty & Deadline-based & None & None \\
+\citet{alzaabi2016berth} & Discrete MILP & Service time & None & Forbidden assignments & None \\
+\citet{Ursavas2022PriorityControlBAP} & Discrete MILP & Service quality & Contractual classes & None & None \\
+\citet{chu2025integrating} & BAP + ML forecast & Waiting time & None & None & Arrival PtO (two-stage) \\
+\textbf{Ours} & Discrete weekly precedence MILP & Unweighted completion\textsuperscript{a} & Hard no-wait class & Data-driven type matrix & Learned service time via black-box DFL \\
+\bottomrule
+\end{tabular}
+
+\vspace{2pt}
+\begin{flushleft}
+\footnotesize \textsuperscript{a}\,Weighted completion supported as a direct extension.
+\end{flushleft}
+\end{table}

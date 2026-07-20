@@ -1,0 +1,52 @@
+\documentclass[review]{elsarticle}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xcolor}
+% Draft-note macro; renders visibly in the review build.
+\newcommand{\todo}[1]{\textcolor{red}{[\textbf{TODO:} #1]}}
+
+\journal{Transportation Research Part E: Logistics and Transportation Review}
+
+\begin{document}
+
+\begin{frontmatter}
+
+\title{Decision-Focused Learning of Vessel Service Times for Berth Allocation}
+
+\author[auburn]{Juan Pablo Morande}
+\affiliation[auburn]{organization={Auburn University},
+  city={Auburn}, state={AL}, country={USA}}
+% \todo{confirm author list, affiliations, and corresponding-author details}
+
+\begin{abstract}
+\todo{Abstract written last, after Results are final. Placeholder: We study
+decision-focused learning (DFL) for the discrete berth allocation problem (BAP)
+at the Port of San Antonio, Chile, training a vessel service-time predictor on
+downstream schedule regret rather than prediction error, and compare it against
+the standard predict-then-optimize (PtO) pipeline.}
+\end{abstract}
+
+\begin{keyword}
+berth allocation \sep decision-focused learning \sep predict-then-optimize \sep
+service-time prediction \sep mixed-integer programming \sep port operations
+\end{keyword}
+
+\end{frontmatter}
+
+\input{sections/introduction}
+\input{sections/related_work}
+\input{sections/problem_data}
+\input{sections/methodology}
+\input{sections/results}
+\input{sections/discussion}
+\input{sections/conclusion}
+
+\bibliographystyle{elsarticle-num}
+\bibliography{references}
+
+\end{document}
