@@ -1,3 +1,105 @@
-% placeholder
-\section{introduction}\label{sec:introduction}
-	odo{section pending}
+\section{Introduction}\label{sec:intro}
+
+Seaport container terminals allocate arriving vessels to a limited set of
+heterogeneous berths, and the quality of that allocation governs how long ships
+wait, how evenly quay cranes are used, and how reliably the terminal meets its
+service commitments. The berth allocation problem (BAP) formalizes this
+decision, and it has been studied extensively over the last two decades
+\citep{bierwirth2010survey}. At a port such as San Antonio, Chile, the country's
+largest container gateway, the difficulty is compounded by a shared entry
+channel that vessels must transit one at a time and by berths that differ in
+length, draft, and crane equipment. A planner must decide, for a week of
+expected arrivals, which vessel occupies which berth and in what order, so that
+later arrivals are not held offshore while an earlier vessel is still working.
+The channel couples the berths: a vessel cannot enter or leave while another is
+transiting, so a schedule that looks feasible berth by berth can still stall
+when the shared passage is contested. Small errors in the assumed timing of one
+vessel therefore ripple beyond its own berth.
+
+The load-bearing input to this decision is the expected service time of each
+vessel, that is, the time a ship will occupy its berth from mooring to
+departure. Every scheduling model consumes these durations, and the schedule it
+returns is only as good as the durations it was given. Service time is not
+known in advance; it depends on the volume of containers to move, the crane
+allocation, the labor shift, and conditions that are realized only once the
+vessel is alongside. Because service time is uncertain and consequential, a
+growing body of work predicts it from historical operational data and treats
+the prediction as a plug-in for downstream planning
+\citep{yan2024predicting,chu2025vessel}, while a parallel line of work hedges
+against the uncertainty directly through robust and stochastic formulations
+\citep{rodrigues2022uncertainty,kolley2023robust}. Both directions share a
+common premise: a better estimate of service time yields a better schedule.
+
+The prevailing predictive pipeline is two-stage. A machine-learning model is
+first trained to minimize a prediction-error metric such as mean absolute or
+root-mean-squared error, and its point predictions are then passed, unchanged,
+to the optimizer that builds the schedule. This predict-then-optimize (PtO)
+arrangement is convenient because the two stages can be developed and validated
+independently, but it optimizes the wrong quantity: forecast accuracy is a
+proxy for what the planner actually cares about, which is the cost of the
+schedule the forecast induces. Decision-focused learning (DFL) removes the
+proxy by training the predictor on the downstream decision cost, or regret,
+rather than on prediction error, so that the model learns to be accurate where
+accuracy changes the decision and is permitted to be imprecise where it does
+not \citep{elmachtoub2022spo,mandi2024decision}. DFL has been applied to
+shortest-path, knapsack, and portfolio problems, but to our knowledge it has not
+been applied to berth allocation. It has also rarely been studied in the
+setting that berth allocation demands, where the prediction enters the
+scheduling \emph{constraints} rather than a linear objective cost vector
+\citep{hu2023twostage,mandi2025feasibility}. This distinction matters: the
+Smart Predict-then-Optimize (SPO+) surrogate of \citet{elmachtoub2022spo}
+assumes the prediction is the objective's cost vector and does not apply when
+the prediction sits inside a precedence constraint, as a service time does.
+
+The reason to expect DFL to help here is that schedule cost is asymmetric in the
+prediction error, and a squared-error loss is blind to that asymmetry. Consider
+a berth working a sequence of vessels. If the model under-predicts a vessel's
+service time, the optimizer schedules the next vessel to moor too early; when
+the vessel in fact overruns, the following one is delayed, and that delay
+propagates down the queue as each subsequent vessel inherits the accumulated
+slippage. If the model over-predicts, the optimizer leaves the berth idle for a
+short interval and the next vessel simply starts on time, with no downstream
+consequence. The two errors are of equal magnitude but not of equal cost: one
+cascades and the other does not. Mean-squared error penalizes over- and
+under-prediction identically, so a PtO predictor has no incentive to err on the
+conservative side. A decision-focused loss, computed through the scheduler, sees
+the cascade directly and can push the predictor toward the errors that are cheap
+to make. We refer to this mechanism as \emph{cascade asymmetry}, and it is the
+hypothesis that motivates the present study.
+
+We test this hypothesis empirically, and we report a mixed outcome rather than a
+clean win. The contributions of this paper are the following. First, we
+formulate a discrete, weekly-horizon BAP as a mixed-integer linear program and
+integrate a learned service-time predictor into it, differentiating through the
+solver with a black-box scheme
+\citep{pogancic2020blackbox,berthet2020learning,tang2024pyepo}. To our
+knowledge this is the first decision-focused treatment of berth allocation, and
+it operates in the harder regime where the prediction enters the model's
+constraints rather than its objective coefficients. Second, we make a
+formulation choice that aligns the training loss and the reported regret metric
+with the solver's own objective, which yields an exact guarantee of
+non-negative regret; we verify this guarantee both analytically and by
+enumeration over small instances. Third, we evaluate the approach on a real
+dataset of vessel calls at the Port of San Antonio spanning 2019 to 2025 and on
+controlled synthetic instances. On the synthetic instances DFL reduces schedule
+regret relative to PtO, and the margin widens as berth contention increases,
+which is consistent with the cascade-asymmetry mechanism. On the real-data
+instances the gain falls within run-to-run variance, and the black-box gradient
+is unstable, so that a usable result requires careful learning-rate control and
+early stopping. We do not claim that DFL robustly outperforms PtO on real data.
+Fourth, we give an honest account of the practical obstacles that a deployable
+DFL-for-BAP system would have to overcome, including the gradient instability
+noted above, a feature we suspect leaks the target, and limitations in the
+geometry of the available instances that blunt the decision signal DFL relies
+on.
+
+The remainder of the paper is organized as follows. Section~\ref{sec:related}
+reviews the berth allocation literature, the treatment of service-time
+uncertainty, and decision-focused learning, and locates our contribution within
+them. Section~\ref{sec:problem} describes the operational setting at the Port of
+San Antonio and the vessel-call dataset, including its limitations.
+Section~\ref{sec:method} presents the discrete BAP model, the service-time
+predictors, and the decision-focused training procedure.
+Section~\ref{sec:results} reports the computational experiments on synthetic and
+real instances. Section~\ref{sec:discussion} interprets the results and the
+practical obstacles they expose, and Section~\ref{sec:conclusion} concludes.

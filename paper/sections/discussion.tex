@@ -1,3 +1,147 @@
-% placeholder
-\section{discussion}\label{sec:discussion}
-	odo{section pending}
+\section{Discussion}\label{sec:discussion}
+
+The experiments in Section~\ref{sec:results} give a mixed and, we believe,
+instructive picture. Decision-focused learning (DFL) reduces schedule regret in
+the synthetic experiments, but only under the conditions the method is designed
+to exploit, and the gain does not carry over to the real-data experiment. This
+section interprets that pattern through the cascade-asymmetry mechanism of
+Section~\ref{sec:method}, explains why the real-data gains fail to materialize,
+sets out the threats to validity that qualify every claim above, and states what
+the results do and do not imply for practice.
+
+\subsection{When does decision-focused learning help?}\label{sec:disc-when}
+
+The synthetic results are best read through the contention of the berth
+schedule. At contention $1.0$, where berth demand is close to capacity, DFL cuts
+mean schedule regret by roughly a third relative to predict-then-optimize (PtO).
+At contention $0.5$ the two methods are within run-to-run noise, and DFL is
+occasionally slightly worse. This dependence is exactly what the
+cascade-asymmetry mechanism of Section~\ref{sec:dfl} predicts. When contention is
+high, berth assignments are packed back to back, and an under-predicted service
+time propagates: the optimizer starts the following vessel too early, the overlap
+is realized when the true service time arrives, and the delay cascades down the
+berth queue. DFL learns to hedge against this asymmetry by biasing its
+predictions upward, trading predictive accuracy for schedules that absorb the
+costly error. That hedge only pays off when cascades are frequent. At low
+contention vessels rarely conflict, the realized schedule cost is nearly
+insensitive to the prediction fed into the optimizer, and there is little
+decision signal for the decision-focused loss to exploit; the regret surface is
+close to flat in the neighbourhood of the predictions, so a loss defined on that
+surface cannot distinguish good hedges from bad ones.
+
+Two secondary observations reinforce this reading. First, the improvement in
+decisions coincides with a deterioration in predictive accuracy: the DFL
+predictor has worse mean absolute error than its PtO counterpart, consistent with
+a model that is no longer trying to match the service time but to shape the
+downstream schedule. Better decisions bought with worse forecasts are the
+signature of a working decision-focused loss, not an anomaly. Second, the effect
+is contingent on adequate training. An under-trained DFL run was worse than PtO,
+which indicates that the decision-focused gradient needs enough epochs to move
+the predictor away from its warm start before the hedge is expressed. The benefit
+of DFL is therefore conditional on both the decision environment and the
+optimization budget, not a property the method confers automatically.
+
+\subsection{Why the real-data gains do not materialize}\label{sec:disc-realdata}
+
+In the real-$\tau$ decision experiment DFL does not reliably beat PtO. Across
+learning rates the DFL-minus-PtO regret gap lies between roughly $-1\%$ and
+$+2\%$, which is smaller than the run-to-run variation in PtO's own regret
+(about two units on a scale near thirty). We read this as no reliable
+improvement rather than a small one, and several factors plausibly account for
+it.
+
+First, the gradient is the limiting factor. Differentiating through the berth
+MILP with a black-box estimator produces a high-variance signal, and validation
+regret behaves accordingly: it improves for one or two epochs and then diverges,
+in one case climbing from about thirty to about seventy. Early stopping is
+therefore essential, but it also caps what DFL can achieve, because the best
+epoch barely departs from the PtO warm start. This instability is not particular
+to our implementation; it is the known difficulty of learning predictors whose
+outputs enter the constraints of the downstream program rather than only its
+objective \citep{hu2023twostage, mandi2025feasibility}, where small changes in
+the predicted parameters can move the feasible region and make the
+solution mapping erratic.
+
+Second, the real ``instances'' lack the structure DFL exploits. Because we do not
+have coherent weekly berth plans, each instance is assembled by grouping
+unrelated real vessels under a synthetic arrival and weight geometry. The
+resulting instances reproduce the marginal feature distribution of the port but
+not the temporal coherence of an actual berth week, and it is precisely that
+coherence that generates the sustained contention on which the cascade mechanism
+depends. Weakening the contention structure weakens the only channel through
+which DFL improved decisions in the synthetic study.
+
+Third, the effect we are trying to detect is small relative to the noise floor of
+the estimate. Validation sets are small, so the regret estimate is itself noisy,
+and a genuine gain of one or two percent is difficult to separate from sampling
+variation at this scale. Fourth, DFL is warm-started from the PtO solution. In
+the absence of a clear decision signal the decision-focused loss has nothing to
+pull the predictor toward, so the best it can do is match the baseline, and the
+divergent-gradient episodes mean it can also degrade it. Taken together, these
+observations are consistent with the broader DFL literature's caution about
+predicted parameters that appear in constraints, and they temper any claim that
+decision-focused training is a general improvement for berth scheduling on
+operational data.
+
+\subsection{Threats to validity}\label{sec:disc-threats}
+
+We record the main threats explicitly, in decreasing order of consequence for the
+conclusions.
+
+\emph{Suspected target leakage.} As discussed in Section~\ref{sec:datalimits},
+the draft-difference feature depends on the departure draft, which is known only
+after service is complete. The predictive accuracies reported for the tree models
+(around $11.7$~h MAE) are therefore likely optimistic, and no operational claim
+about forecast quality should be made until the models are re-fit without this
+feature and any other post-service quantity. A leakage-free re-fit is a
+prerequisite for, not a refinement of, the accuracy results.
+
+\emph{Reproducibility.} The exact feature-engineered training table cannot be
+regenerated from the released scripts, which limits independent replication of
+the predictive results. In addition, the optimizer depends on a
+network-metered commercial license, which makes large experiment sweeps slow and
+fragile. We mitigated the second issue by also solving with an open-source
+solver; the two agree on the optima for the small instances used here, so the
+decision results do not hinge on the commercial solver.
+
+\emph{Experimental scale.} Instance counts, training epochs, and seed counts were
+kept modest for computational tractability. The synthetic contention effect in
+particular rests on a limited number of seeds and should be read as preliminary
+evidence of a mechanism rather than a precise estimate of its magnitude.
+
+\emph{Objective scope.} The deployed objective is unweighted. Vessel-priority
+weights, which would let the optimizer, and through it the decision-focused loss,
+prioritize high-value calls, are deferred to future work. The present study
+therefore isolates the cascade-asymmetry channel and does not speak to whether
+priority weighting would enlarge or shrink the DFL advantage.
+
+\emph{Single port, single period.} All results come from one port over one
+period. The operational regularities that shape both the features and the
+contention structure are specific to that terminal, and generalization to ports
+with different berth layouts, traffic mixes, or service-time distributions is
+untested.
+
+\subsection{Practical implications}\label{sec:disc-practice}
+
+The overall message is deliberately cautious. On this evidence, decision-focused
+learning is not a turnkey improvement for berth scheduling. Its advantage is
+real where we can observe the mechanism at work, but it is conditional on high
+enough contention that prediction errors cascade, on a training budget sufficient
+to express the hedge, on temporally coherent instances that sustain that
+contention, and on a stable gradient through the scheduling program. It also
+rests, as does every accuracy figure here, on leakage-free features. When those
+conditions are absent, as in our real-data experiment, DFL matches the
+predict-then-optimize baseline at best and can trail it when the gradient
+diverges.
+
+The path forward is to address the gradient and the instances rather than to
+abandon the approach. Feasibility-aware formulations of DFL are designed for the
+setting where predictions enter constraints and offer a more stable training
+signal than a plain black-box estimator \citep{mandi2025feasibility}. Perturbed
+and implicit differentiation of the decision layer
+\citep{berthet2020learning, niepert2021imle} provide lower-variance gradients
+that may remove the need for aggressive early stopping and let training move
+meaningfully beyond the warm start. Pairing either of these with genuinely
+coherent weekly instances, once such data can be assembled, would test the
+cascade-asymmetry hypothesis under the conditions where the synthetic results
+suggest it should matter most.

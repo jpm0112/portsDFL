@@ -1,3 +1,92 @@
-% placeholder
-\section{results}\label{sec:results}
-	odo{section pending}
+\section{Experiments and results}\label{sec:results}
+
+\subsection{Experimental setup}
+
+We evaluate two questions in turn: how accurately the candidate models predict vessel service times, and whether training those models to minimize decision cost, rather than prediction error, produces better berth schedules. All predictive models are tuned with Optuna under 5-fold cross-validation stratified by berth, following the protocol described in Section~\ref{sec:predictors}. The tuned configurations are then fixed for the decision experiments.
+
+The decision experiments contrast two learning objectives on the same berth allocation problem (BAP). The predict-then-optimize (PtO) baseline trains the predictive model under a mean-squared-error loss and passes its point forecasts to the optimizer. Decision-focused learning (DFL) instead trains the same model to minimize the cost of the resulting schedule, using the black-box differentiation of \citet{pogancic2020blackbox} as implemented in PyEPO \citep{tang2024pyepo}. To isolate the effect of the objective, we warm-start DFL from the converged PtO weights, so the two runs differ only in the loss they optimize from that point onward.
+
+Every BAP instance is solved to optimality. Our primary solver is a commercial mixed-integer solver, but its network-metered license makes the large, repeated solves required by DFL training slow and occasionally unreliable. As a reproducibility safeguard we re-solve the same instances with the open-source HiGHS solver; on the small instances studied here the two solvers return identical objective values and schedules, so the DFL gradient is unaffected by the choice of solver.
+
+We report these experiments as preliminary. The runs use a reduced scale, tens of training instances, 15 training epochs, and a small number of random seeds, chosen to keep the metered solver within budget. The scale is sufficient to expose the qualitative behavior of DFL under varying problem difficulty but not to establish tight performance estimates, and we flag below where seed variance limits the conclusions we can draw.
+
+\subsection{Predictive accuracy}
+
+Table~\ref{tab:predictive} reports 5-fold cross-validation performance on the real vessel-call data, with service time measured in hours and models sorted by mean absolute error (MAE).
+
+\begin{table}[t]
+\centering
+\caption{Predictive accuracy on real vessel-call data, 5-fold cross-validation, sorted by MAE. Service time is in hours.}
+\label{tab:predictive}
+\begin{tabular}{lrrrr}
+\toprule
+Model & MAE (h) & RMSE (h) & $R^2$ & MAPE \\
+\midrule
+Random forest & 11.70 & 18.27 & 0.606 & 0.402 \\
+XGBoost       & 11.74 & 18.33 & 0.603 & 0.400 \\
+LightGBM      & 11.79 & 18.33 & 0.604 & 0.405 \\
+NODE          & 11.97 & 18.62 & 0.591 & 0.389 \\
+RealMLP       & 12.12 & 18.49 & 0.596 & 0.415 \\
+TabM          & 12.15 & 19.05 & 0.572 & 0.389 \\
+Linear        & 14.27 & 20.79 & 0.490 & 0.498 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Gradient-boosted trees and random forests lead the ranking, clustering near 11.7~h MAE. The neural tabular models, NODE, RealMLP, and TabM, follow closely at 11.97 to 12.15~h. The linear head trails the field at 14.27~h MAE and 0.490 $R^2$, a gap of roughly 2.5~h behind the best tree ensembles.
+
+These figures are likely optimistic. We suspect that one feature encodes information available only after service completion, introducing post-service leakage that inflates accuracy across all models; we examine this feature and its effect in Section~\ref{sec:datalimits} and discuss the implications in Section~\ref{sec:discussion}. For the decision experiments the ranking matters less than the choice of backbone. We adopt the linear head not because it is the accuracy frontier, which it plainly is not, but because it is a lightweight and controllable model whose training dynamics under the black-box gradient are transparent, making it a suitable instrument for studying when DFL helps.
+
+\subsection{Synthetic instances: when does DFL help?}
+
+To probe the conditions under which the decision-focused objective pays off, we generate controlled synthetic BAP instances with $N=8$ vessels and $M=3$ berths, and vary the level of berth contention, the degree to which vessel demands compete for the same berths over overlapping time windows. Table~\ref{tab:synthetic} reports mean regret (lower is better) for PtO and DFL at two contention levels, trained with the black-box gradient for 15 epochs on 40 training and 20 validation instances.
+
+\begin{table}[t]
+\centering
+\caption{Synthetic BAP instances ($N=8$, $M=3$): mean regret for PtO versus DFL at two berth-contention levels. Black-box gradient, 15 epochs, 40 train / 20 validation instances. Lower is better.}
+\label{tab:synthetic}
+\begin{tabular}{llrrr}
+\toprule
+Contention & Seed & Metric & PtO & DFL \\
+\midrule
+0.5 & 1 & mean regret & 3.54 & 3.63 \\
+0.5 & 2 & mean regret & 2.38 & 2.77 \\
+\midrule
+1.0 & 1 & mean regret & 5.36 & 3.60 \\
+1.0 & 1 & p90 regret  & 11.37 & 8.43 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The benefit of DFL grows with contention. At the low contention level of 0.5, DFL is within seed-to-seed noise of PtO or slightly worse: across the two seeds shown, DFL raises mean regret from 3.54 to 3.63 and from 2.38 to 2.77. At this difficulty, vessels rarely conflict for berths, so the schedule cost is nearly flat in the prediction error and DFL has little decision structure to exploit; tailoring the predictor to the objective yields no advantage over minimizing squared error.
+
+At the higher contention level of 1.0, the picture changes. DFL reduces mean regret from 5.36 to 3.60, a decrease of about 33\%, and reduces the 90th-percentile regret from 11.37 to 8.43, a decrease of about 26\%. When berths are heavily contended, a prediction error can trigger a costly reassignment that cascades across later vessels, and DFL trades a small amount of predictive accuracy, its MAE is slightly worse than the PtO model's, for schedules that avoid these expensive failures. We attribute this to the cascade asymmetry of the berth allocation objective, developed in Section~\ref{sec:discussion}: under contention, the cost of underestimating a service time is asymmetric with respect to overestimating it, and the decision-focused loss learns to hedge in the cheaper direction.
+
+The advantage is contingent on an adequate training budget. An under-trained DFL run limited to 4 epochs performed worse than PtO even at contention 1.0, indicating that the black-box gradient requires enough epochs to move the warm-started weights into a regime where the decision-aware objective improves on squared-error training.
+
+We report the contention-1.0 result for a single random seed. Because it rests on one seed, it should be read as an indicative rather than a confirmed effect size; replication across additional seeds and contention levels, together with confidence intervals, is the immediate next step. The two low-contention seeds and the under-training observation already bound the qualitative claim: DFL delivers no advantage when contention is low or the training budget is inadequate, and a substantial regret reduction at moderate contention when it is not.
+
+\subsection{Real service times: no reliable improvement}
+
+We next apply the same comparison to real-$\tau$ instances with $N=6$ vessels and $M=2$ berths, constructed directly from the vessel-call data so that the service times are the measured values rather than synthetic draws. Table~\ref{tab:real} reports PtO versus DFL mean regret across three DFL learning rates.
+
+\begin{table}[t]
+\centering
+\caption{Real-$\tau$ BAP instances ($N=6$, $M=2$): PtO versus DFL mean regret across DFL learning rates. Lower is better; $\Delta$ is DFL relative to PtO.}
+\label{tab:real}
+\begin{tabular}{lrrr}
+\toprule
+DFL learning rate & PtO & DFL & $\Delta$ \\
+\midrule
+$5\times10^{-3}$ (default) & 31.47 & 35.64 & $+13\%$ \\
+$1\times10^{-3}$           & 29.82 & 29.56 & $-0.9\%$ \\
+$3\times10^{-4}$           & 27.74 & 28.39 & $+2.4\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+On these instances DFL yields no reliable improvement. The DFL-minus-PtO gap ranges from about $-0.9\%$ to $+2.4\%$ once the learning rate is reduced from its default, and that gap is smaller than the run-to-run variation in PtO's own regret, which spans roughly 28 to 31 on a scale near 30. A difference of one to two percent between the objectives cannot be separated from the variation each objective already exhibits across configurations, so we cannot claim a decision-focused benefit here.
+
+The black-box gradient is also unstable on the real instances. At the default learning rate of $5\times10^{-3}$, validation regret diverges after the first epoch, climbing from about 36 to as high as 99, and the final DFL regret of 35.64 is 13\% worse than PtO. Reducing the learning rate stabilizes training only marginally: the training traces show validation regret improving for one or two epochs before climbing again, so the model retained by early stopping is captured at an early epoch that barely differs from the PtO warm start. This explains why the smaller learning rates hover so close to PtO in both directions, the best available DFL iterate has moved little from where it began.
+
+The promise DFL shows on synthetic contention therefore does not carry over to these real, temporally incoherent instances. We defer a full interpretation of the difference, and of what makes the real instances resistant to the decision-focused objective, to Section~\ref{sec:discussion}.
