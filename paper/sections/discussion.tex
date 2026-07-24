@@ -88,13 +88,18 @@ operational data.
 We record the main threats explicitly, in decreasing order of consequence for the
 conclusions.
 
-\emph{Suspected target leakage.} As discussed in Section~\ref{sec:datalimits},
-the draft-difference feature depends on the departure draft, which is known only
-after service is complete. The predictive accuracies reported for the tree models
-(around $11.7$~h MAE) are therefore likely optimistic, and no operational claim
-about forecast quality should be made until the models are re-fit without this
-feature and any other post-service quantity. A leakage-free re-fit is a
-prerequisite for, not a refinement of, the accuracy results.
+\emph{Suspected target leakage.} The draft-difference feature depends on the
+departure draft, which is known only after service is complete, and is therefore
+a candidate source of post-service leakage. To bound its effect we re-fit every
+model with the feature removed, keeping the tuned hyperparameters fixed; the
+leakage-free figures are the ones reported in Section~\ref{sec:results}. Removing
+the feature raises tree-model MAE by roughly three percent (for example, random
+forest from $11.7$ to $12.1$~h) and leaves the tree ensembles ahead of the
+neural models and the linear head last, so the predictive conclusions do not
+rest on the suspect feature. This is reassuring but
+not decisive: the three-percent gap may be legitimate pre-berthing signal rather
+than leakage, and the feature's exact measurement time should still be confirmed
+with the port before any operational deployment.
 
 \emph{Reproducibility.} The exact feature-engineered training table cannot be
 regenerated from the released scripts, which limits independent replication of

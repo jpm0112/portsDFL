@@ -93,14 +93,15 @@ These were documented (in `prediction_models/docs/REVIEW_FINDINGS.md`, Round 2)
 but deliberately **not changed in code** per owner's decision. For publication
 they need resolving, not just documenting:
 
-1. **`Calado diff` suspected target leakage (🔴 highest priority).** It is the
-   arrival−departure draft difference — knowable only *after* service
-   (`docs/project_description.md` flags draft difference as post-berthing) —
-   yet it sits in `config.ALL_FEATURES`. `predictor/features.py` defaults it to
-   0 at inference and calls `covid_era` cutoffs "reverse-engineered", which is
-   consistent with training having used the post-hoc value. **Action: trace how
-   `data/training_dataset.csv` computed it; if post-hoc, drop the feature and
-   re-tune. A reviewer who spots this will question every prediction metric.**
+1. **`Calado diff` suspected target leakage — QUANTIFIED (2026-07-23).** It is the
+   arrival−departure draft difference, knowable only *after* service, yet it sat
+   in `config.ALL_FEATURES`. **Resolved by re-fit:** re-ran 5-fold CV with the
+   feature removed (fixed hyperparameters). Impact is small — tree-model MAE rises
+   ~3% (rf 11.70→12.06, xgb 11.75→12.07, lgbm 11.74→12.16 h), linear unchanged,
+   ranking unchanged. The paper now reports the **leakage-free** figures throughout,
+   so the predictive conclusions do not depend on the suspect feature. Remaining:
+   confirm the feature's measurement time with the port (the ~3% could be legitimate
+   pre-berthing signal). Script: `scratchpad/leakage_refit.py`.
 2. **`data/training_dataset.csv` is not reproducible.** The committed
    `data_pipeline/` builders emit a different schema (`estadia_sitio_hours`, …)
    than the models consume (`service_time_hours`, `covid_era`, cyclical

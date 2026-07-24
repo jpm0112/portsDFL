@@ -16,26 +16,26 @@ Table~\ref{tab:predictive} reports 5-fold cross-validation performance on the re
 
 \begin{table}[t]
 \centering
-\caption{Predictive accuracy on real vessel-call data, 5-fold cross-validation, sorted by MAE. Service time is in hours.}
+\caption{Predictive accuracy on real vessel-call data, 5-fold cross-validation, sorted by MAE. Service time is in hours. The suspected post-service draft-difference feature is removed (Section~\ref{sec:datalimits}); including it lowers tree-model MAE by about 3\%.}
 \label{tab:predictive}
 \begin{tabular}{lrrrr}
 \toprule
 Model & MAE (h) & RMSE (h) & $R^2$ & MAPE \\
 \midrule
-Random forest & 11.70 & 18.27 & 0.606 & 0.402 \\
-XGBoost       & 11.74 & 18.33 & 0.603 & 0.400 \\
-LightGBM      & 11.79 & 18.33 & 0.604 & 0.405 \\
-NODE          & 11.97 & 18.62 & 0.591 & 0.389 \\
-RealMLP       & 12.12 & 18.49 & 0.596 & 0.415 \\
-TabM          & 12.15 & 19.05 & 0.572 & 0.389 \\
-Linear        & 14.27 & 20.79 & 0.490 & 0.498 \\
+Random forest & 12.06 & 18.76 & 0.584 & 0.418 \\
+XGBoost       & 12.07 & 18.71 & 0.587 & 0.416 \\
+LightGBM      & 12.16 & 18.74 & 0.585 & 0.424 \\
+NODE          & 12.20 & 18.93 & 0.577 & 0.401 \\
+TabM          & 12.49 & 19.48 & 0.552 & 0.396 \\
+RealMLP       & 12.56 & 18.89 & 0.579 & 0.440 \\
+Linear        & 14.27 & 20.84 & 0.488 & 0.498 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Gradient-boosted trees and random forests lead the ranking, clustering near 11.7~h MAE. The neural tabular models, NODE, RealMLP, and TabM, follow closely at 11.97 to 12.15~h. The linear head trails the field at 14.27~h MAE and 0.490 $R^2$, a gap of roughly 2.5~h behind the best tree ensembles.
+Random forests and gradient-boosted trees lead the ranking, clustering near 12.1~h MAE. The neural tabular models, NODE, TabM, and RealMLP, follow at 12.2 to 12.6~h. The linear head trails the field at 14.27~h MAE and 0.488 $R^2$, a gap of roughly 2.2~h behind the best tree ensembles.
 
-These figures are likely optimistic. We suspect that one feature encodes information available only after service completion, introducing post-service leakage that inflates accuracy across all models; we examine this feature and its effect in Section~\ref{sec:datalimits} and discuss the implications in Section~\ref{sec:discussion}. For the decision experiments the ranking matters less than the choice of backbone. We adopt the linear head not because it is the accuracy frontier, which it plainly is not, but because it is a lightweight and controllable model whose training dynamics under the black-box gradient are transparent, making it a suitable instrument for studying when DFL helps.
+One feature, the draft difference, encodes information that may only be available after service completion (Section~\ref{sec:datalimits}). To ensure the accuracies above are not inflated by post-service leakage, the figures in Table~\ref{tab:predictive} are computed with that feature removed; adding it back lowers tree-model MAE by only about three percent (for example, random forest from $12.06$ to $11.70$~h) and leaves the tree ensembles at the front of the ranking, so the predictive results are robust to the concern rather than dependent on it. For the decision experiments the ranking matters less than the choice of backbone. We adopt the linear head not because it is the accuracy frontier, which it plainly is not, but because it is a lightweight and controllable model whose training dynamics under the black-box gradient are transparent, making it a suitable instrument for studying when DFL helps.
 
 \subsection{Synthetic instances: when does DFL help?}
 

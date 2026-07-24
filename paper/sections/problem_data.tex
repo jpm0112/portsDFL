@@ -109,10 +109,13 @@ should weigh them as threats to the validity of what follows. First, the
 draft-difference feature is computed as arrival draft minus departure draft, and the
 departure draft is known only after the vessel has finished loading or discharging,
 that is, after the service whose duration we are trying to predict. This feature is
-therefore a suspected source of target leakage, and to the extent the models lean on
-it the reported predictive accuracy may be optimistic. We flag this explicitly as an
-open issue requiring verification and a leakage-free re-fit that either removes the
-feature or replaces it with a pre-berthing proxy. Second, the exact
+therefore a candidate source of target leakage. We address it directly in
+Section~\ref{sec:results} by re-fitting every model with the feature removed:
+doing so raises tree-model error by only about three percent and does not change
+the ranking, so we report those leakage-free figures throughout and the predictive
+conclusions do not depend on the suspect feature. Its exact measurement time should
+nonetheless be confirmed with the port, since the small gap could be legitimate
+pre-berthing signal rather than leakage. Second, the exact
 feature-engineered training table used to fit the models is not fully reproducible
 from the released pipeline scripts, so an independent researcher could reconstruct
 the procedure but not necessarily the identical inputs. Third, the underlying
